@@ -36,13 +36,14 @@ drive.mount("/content/drive")
 
 ## What's where
 
-- `src/mfr_data.py`: loads the three datasets
+- `src/mfr_data.py`: loads the three datasets and makes the splits
+- `data/`: our train / val / test splits (2,000 / 200 / 300 pairs per dataset, one pair per prompt, ≤ 768 tokens)
 - `notebooks/`: the notebooks we run
 
 ## Progress
 
 - [x] Load the three datasets
-- [ ] Train / test splits
+- [ ] Train / val / test splits (code ready, run step 2 of the notebook once and push `data/`)
 - [ ] DPO training (one stage, then three in a row)
 - [ ] Replay methods: random, lowest margin, MFR
 - [ ] Experiments + results
