@@ -51,14 +51,16 @@ drive.mount("/content/drive")
 ## What's where
 
 - `src/mfr_data.py`: loads the three datasets and makes the splits
+- `src/mfr_dpo.py`: loads the model (4-bit QLoRA), trains with DPO, measures margins
 - `data/`: our train / val / test splits (see "Splits and the token limit" above)
 - `notebooks/01_load_data.ipynb`: downloads the datasets and makes `data/`. **Already done, don't re-run** unless we change a data rule (filters, token limit, split sizes)
 - `notebooks/02_data_review.ipynb`: counts, sanity checks, lengths and examples from `data/`
+- `notebooks/03_train_one_stage.ipynb`: trains on helpful and checks it learned (needs a GPU: L4 or A100)
 
 ## Progress
 
 - [x] Load the three datasets
 - [x] Train / val / test splits (2,000 / 200 / 300 per dataset, in `data/`)
-- [ ] DPO training (one stage, then three in a row)
+- [ ] DPO training: one stage (`03`, ready to run), then three in a row
 - [ ] Replay methods: random, lowest margin, MFR
 - [ ] Experiments + results
