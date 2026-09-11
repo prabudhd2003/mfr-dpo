@@ -21,9 +21,8 @@ All three are loaded as tables with the same columns: `prompt`, `chosen`, `rejec
 In the proposal we planned for sequences of 512–768 tokens. At 768 tokens, HelpSteer2 runs short
 (434 of its pairs are too long), which leaves only **1,828 train / 200 val / 300 test** pairs per dataset.
 
-So we raised the limit to **1024 tokens**. That should give the full **2,000 train / 200 val / 300 test**
-for every dataset. Longer sequences make training slower (our guess is 20–30% more time per stage; the pilot
-will tell us the real number). If it's too slow, we go back to 768 tokens and 1,828 / 200 / 300: set
+So we raised the limit to **1024 tokens**, which gives the full **2,000 train / 200 val / 300 test**
+for every dataset (only 154 HelpSteer2 pairs are still too long). Longer sequences make training slower (our guess is 20–30% more time per stage; the pilot will tell us the real number). If it's too slow, we go back to 768 tokens and 1,828 / 200 / 300: set
 `max_tokens=768` in the split cell of `01_load_data.ipynb` and re-run it.
 
 Either way, every dataset gets the same split sizes, each prompt appears only once, and no prompt is
