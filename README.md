@@ -36,7 +36,7 @@ drive.mount("/content/drive")
 
 ## What's where
 
-- `src/data.py`: loads the three datasets
+- `src/mfr_data.py`: loads the three datasets
 - `notebooks/`: the notebooks we run
 
 ## Progress
