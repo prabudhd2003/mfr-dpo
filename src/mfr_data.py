@@ -112,37 +112,49 @@ def make_splits(datasets, tokenizer, sizes, max_tokens=768, seed=0):
     sizes:    {"train": 2000, "val": 200, "test": 300}  (same for every dataset)
 
     Steps:
-      1. drop prompts that appear in more than one dataset (so a test prompt is never trained on)
+      1. a prompt that appears in several datasets is kept only in the SMALLEST one
+         (so a test prompt is never trained on elsewhere, and small datasets don't lose data)
       2. keep one pair per prompt (so train / val / test never share a prompt)
       3. drop pairs longer than max_tokens
       4. shuffle with a fixed seed and cut into test, val, train
+      5. if any dataset is short, cut every train split to the same size,
+         so each training stage gets the same amount of data
     """
-    all_prompts = pd.concat([df["prompt"].drop_duplicates() for df in datasets.values()])
-    counts = all_prompts.value_counts()
-    shared = set(counts[counts > 1].index)
-
-    splits = {}
-    for name, df in datasets.items():
-        df = df[~df["prompt"].isin(shared)]
+    claimed = set()
+    filtered = {}
+    for name in sorted(datasets, key=lambda n: len(datasets[n])):   # smallest first
+        df = datasets[name]
+        start = len(df)
+        df = df[~df["prompt"].isin(claimed)]
+        after_overlap = len(df)
+        claimed.update(df["prompt"])
         df = df.drop_duplicates("prompt")
+        after_dedupe = len(df)
         df = add_token_counts(df, tokenizer)
         longest = df["prompt_tokens"] + df[["chosen_tokens", "rejected_tokens"]].max(axis=1)
         df = df[longest <= max_tokens]
-        df = df.sample(frac=1, random_state=seed).reset_index(drop=True)
+        filtered[name] = df.sample(frac=1, random_state=seed).reset_index(drop=True)
+        print(f"{name:8s} {start:6d} pairs | -{start - after_overlap} shared prompts"
+              f" | -{after_overlap - after_dedupe} extra pairs per prompt"
+              f" | -{after_dedupe - len(df)} too long | {len(df)} left")
 
-        needed = sizes["test"] + sizes["val"] + sizes["train"]
-        if len(df) < needed:
-            print(f"WARNING {name}: only {len(df)} pairs left, need {needed}. Train will be smaller.")
+    n_eval = sizes["test"] + sizes["val"]
+    n_train = min([sizes["train"]] + [len(df) - n_eval for df in filtered.values()])
+    if n_train < sizes["train"]:
+        print(f"\nNot enough data for {sizes['train']} train pairs everywhere: using {n_train} train pairs for ALL datasets.")
 
-        a, b = sizes["test"], sizes["test"] + sizes["val"]
-        parts = {"train": df[b:b + sizes["train"]], "val": df[a:b], "test": df[:a]}
+    splits = {}
+    for name in datasets:
+        df = filtered[name]
+        a, b = sizes["test"], n_eval
+        parts = {"train": df[b:b + n_train], "val": df[a:b], "test": df[:a]}
         for split, part in parts.items():
             part = part.reset_index(drop=True)
             part.insert(0, "id", [f"{name}-{split}-{i:04d}" for i in range(len(part))])
             parts[split] = part
         splits[name] = parts
-        print(f"{name:8s} kept {len(df):6d} after filters -> "
-              + ", ".join(f"{s} {len(p)}" for s, p in parts.items()))
+    print("\n" + "\n".join(f"{name:8s} " + ", ".join(f"{s} {len(p)}" for s, p in parts.items())
+                           for name, parts in splits.items()))
     return splits
 
 
