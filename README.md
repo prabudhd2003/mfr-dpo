@@ -30,7 +30,9 @@ shared between splits or between datasets.
 
 ## How to run
 
-**Colab:** File → Open notebook → GitHub → `prabudhd2003/mfr-dpo` → `notebooks/01_load_data.ipynb`, then Run all. No GPU needed.
+The splits are already in `data/`, so we now only need `notebooks/02_data_review.ipynb`.
+
+**Colab:** File → Open notebook → GitHub → `prabudhd2003/mfr-dpo` → pick a notebook, then Run all. No GPU needed.
 
 **Locally:** `pip install -r requirements.txt`, then open the notebook.
 
@@ -50,12 +52,13 @@ drive.mount("/content/drive")
 
 - `src/mfr_data.py`: loads the three datasets and makes the splits
 - `data/`: our train / val / test splits (see "Splits and the token limit" above)
-- `notebooks/`: the notebooks we run
+- `notebooks/01_load_data.ipynb`: downloads the datasets and makes `data/`. **Already done, don't re-run** unless we change a data rule (filters, token limit, split sizes)
+- `notebooks/02_data_review.ipynb`: counts, sanity checks, lengths and examples from `data/`
 
 ## Progress
 
 - [x] Load the three datasets
-- [ ] Train / val / test splits (code ready, run step 2 of the notebook once and push `data/`)
+- [x] Train / val / test splits (2,000 / 200 / 300 per dataset, in `data/`)
 - [ ] DPO training (one stage, then three in a row)
 - [ ] Replay methods: random, lowest margin, MFR
 - [ ] Experiments + results
