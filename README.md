@@ -16,6 +16,19 @@ the model has forgotten most (Most-Forgotten Replay) works better than replaying
 
 All three are loaded as tables with the same columns: `prompt`, `chosen`, `rejected`.
 
+### Splits and the token limit
+
+In the proposal we planned for sequences of 512–768 tokens. At 768 tokens, HelpSteer2 runs short
+(434 of its pairs are too long), which leaves only **1,828 train / 200 val / 300 test** pairs per dataset.
+
+So we raised the limit to **1024 tokens**. That should give the full **2,000 train / 200 val / 300 test**
+for every dataset. Longer sequences make training slower (our guess is 20–30% more time per stage; the pilot
+will tell us the real number). If it's too slow, we go back to 768 tokens and 1,828 / 200 / 300: set
+`max_tokens=768` in the split cell of `01_load_data.ipynb` and re-run it.
+
+Either way, every dataset gets the same split sizes, each prompt appears only once, and no prompt is
+shared between splits or between datasets.
+
 ## How to run
 
 **Colab:** File → Open notebook → GitHub → `prabudhd2003/mfr-dpo` → `notebooks/01_load_data.ipynb`, then Run all. No GPU needed.
@@ -37,7 +50,7 @@ drive.mount("/content/drive")
 ## What's where
 
 - `src/mfr_data.py`: loads the three datasets and makes the splits
-- `data/`: our train / val / test splits (2,000 / 200 / 300 pairs per dataset, one pair per prompt, ≤ 768 tokens)
+- `data/`: our train / val / test splits (see "Splits and the token limit" above)
 - `notebooks/`: the notebooks we run
 
 ## Progress

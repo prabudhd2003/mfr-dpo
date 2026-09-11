@@ -105,7 +105,7 @@ def add_token_counts(df, tokenizer):
     return df
 
 
-def make_splits(datasets, tokenizer, sizes, max_tokens=768, seed=0):
+def make_splits(datasets, tokenizer, sizes, max_tokens=1024, seed=0):
     """Split each dataset into train / val / test.
 
     datasets: {"helpful": df, "safe": df, "quality": df}
