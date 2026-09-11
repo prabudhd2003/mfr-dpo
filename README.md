@@ -56,11 +56,13 @@ drive.mount("/content/drive")
 - `notebooks/01_load_data.ipynb`: downloads the datasets and makes `data/`. **Already done, don't re-run** unless we change a data rule (filters, token limit, split sizes)
 - `notebooks/02_data_review.ipynb`: counts, sanity checks, lengths and examples from `data/`
 - `notebooks/03_train_one_stage.ipynb`: trains on helpful and checks it learned (needs a GPU: L4 or A100)
+- `notebooks/04_pilot.ipynb`: safe → helpful → quality with no replay, measures forgetting (GPU, ~2.5 h, saves to Drive after each stage)
 
 ## Progress
 
 - [x] Load the three datasets
 - [x] Train / val / test splits (2,000 / 200 / 300 per dataset, in `data/`)
-- [ ] DPO training: one stage (`03`, ready to run), then three in a row
+- [x] DPO training, one stage (`03`): 48.7 min on an L4, 12.6 GB; val accuracy helpful 58%, safe 44%, quality 71%
+- [ ] Pilot: three stages in a row, is there forgetting? (`04`)
 - [ ] Replay methods: random, lowest margin, MFR
 - [ ] Experiments + results
