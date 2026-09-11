@@ -42,7 +42,10 @@ def load_model(model_name=MODEL_NAME, lora_r=16):
         device_map={"": 0},
     )
     model.config.use_cache = False
-    model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
+    model = prepare_model_for_kbit_training(
+        model, use_gradient_checkpointing=True,
+        gradient_checkpointing_kwargs={"use_reentrant": False},  # the newer, recommended checkpointing
+    )
     model = get_peft_model(model, LoraConfig(
         r=lora_r,
         lora_alpha=2 * lora_r,
