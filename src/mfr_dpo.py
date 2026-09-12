@@ -11,6 +11,7 @@ measuring how much the model prefers chosen over rejected (the margin).
 import math
 import time
 
+import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
@@ -242,3 +243,97 @@ def train_stage(model, tokenizer, df, beta=0.1, lr=5e-5, pairs_per_step=16, micr
     peak_gb = torch.cuda.max_memory_allocated() / 1e9
     print(f"Done: {len(rows)} pairs in {minutes:.1f} min, peak GPU memory {peak_gb:.1f} GB")
     return pd.DataFrame(history)
+
+
+# ----------------------------------------------------------------------------
+# Training with replay (used by notebook 05 for all four methods)
+# ----------------------------------------------------------------------------
+
+def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.1, lr=1e-4,
+                       new_per_step=16, old_per_step=2, refreshes=5, micro_batch=2,
+                       max_tokens=1024, seed=0, max_share_per_dataset=None, score_batch_size=4,
+                       desc="training"):
+    """One epoch over df, with `old_per_step` replayed pairs added to every step.
+
+    Same budget for every method: the same 2,000 new pairs, in the same order, in the same number of
+    optimizer steps. Only the choice of the old pairs differs (method="none" adds none).
+
+    The stage is cut into `refreshes` intervals. At the start of each interval after the first,
+    `mfr` and `lowest_margin` re-score the whole buffer and re-rank it; the time this takes is
+    recorded separately (it is the extra cost of those methods). At the first interval the buffer's
+    margins are still the ones measured at the end of the previous stage, so no scoring is needed.
+
+    Returns (history, replay_log):
+        history     one row per optimizer step: step, loss, train_acc, n_replay, minutes, scoring_minutes
+        replay_log  one row per replayed pair: step, id, dataset
+    """
+    import mfr_replay
+    from mfr_utils import seed_everything
+
+    seed_everything(seed)                       # the stage is reproducible on its own
+    rng = np.random.default_rng(seed)
+    rows = df.sample(frac=1, random_state=seed).to_dict("records")
+    n_steps = math.ceil(len(rows) / new_per_step)
+    interval_len = max(1, math.ceil(n_steps / max(1, refreshes)))
+    replaying = method != "none" and buffer is not None and len(buffer) > 0 and old_per_step > 0
+
+    params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.AdamW(params, lr=lr)
+    scheduler = get_linear_schedule_with_warmup(optimizer, max(1, n_steps // 20), n_steps)
+
+    model.train()
+    torch.cuda.reset_peak_memory_stats()
+    start, scoring_seconds = time.time(), 0.0
+    history, replay_log, plan, plan_at = [], [], [], 0
+
+    bar = tqdm(range(n_steps), desc=desc, unit="step")
+    for step in bar:
+        if replaying and step % interval_len == 0:
+            if step > 0 and method in ("mfr", "lowest_margin"):     # re-measure what has been forgotten
+                t0 = time.time()
+                scores = score_pairs(model, tokenizer, buffer.rows(), beta=beta,
+                                     batch_size=score_batch_size, max_tokens=max_tokens,
+                                     desc="refreshing buffer")
+                buffer.set_current(scores["margin"])
+                scoring_seconds += time.time() - t0
+            plan = mfr_replay.plan_interval(buffer, method, interval_len * old_per_step, rng,
+                                            max_share_per_dataset)
+            dataset_of = buffer.rows().set_index("id")["dataset"].to_dict()
+            plan_at = 0
+
+        pairs = rows[step * new_per_step:(step + 1) * new_per_step]
+        old_ids = plan[plan_at:plan_at + old_per_step]
+        plan_at += old_per_step
+        if old_ids:
+            pairs = pairs + buffer.get(old_ids)
+            replay_log += [{"step": step + 1, "id": pair_id, "dataset": dataset_of[pair_id]}
+                           for pair_id in old_ids]
+        if "prompt_tokens" in pairs[0]:
+            pairs = sorted(pairs, key=pair_length)
+
+        optimizer.zero_grad()
+        step_loss, step_acc = 0.0, 0.0
+        for i in range(0, len(pairs), micro_batch):
+            chunk = pairs[i:i + micro_batch]
+            loss, acc = dpo_loss(model, make_batch(tokenizer, chunk, max_tokens), beta)
+            weight = len(chunk) / len(pairs)
+            (loss * weight).backward()
+            step_loss += loss.item() * weight
+            step_acc += acc * weight
+        torch.nn.utils.clip_grad_norm_(params, 1.0)
+        optimizer.step()
+        scheduler.step()
+
+        history.append({"step": step + 1, "loss": step_loss, "train_acc": step_acc,
+                        "n_replay": len(old_ids), "minutes": (time.time() - start) / 60,
+                        "scoring_minutes": scoring_seconds / 60})
+        recent = history[-10:]
+        bar.set_postfix(loss=f"{sum(h['loss'] for h in recent) / len(recent):.3f}",
+                        acc=f"{sum(h['train_acc'] for h in recent) / len(recent):.2f}",
+                        replayed=len(replay_log))
+
+    minutes = (time.time() - start) / 60
+    print(f"Done: {len(rows)} new pairs + {len(replay_log)} replayed in {minutes:.1f} min "
+          f"({scoring_seconds / 60:.1f} min of it re-scoring the buffer), "
+          f"peak GPU memory {torch.cuda.max_memory_allocated() / 1e9:.1f} GB")
+    return pd.DataFrame(history), pd.DataFrame(replay_log, columns=["step", "id", "dataset"])
