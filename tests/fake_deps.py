@@ -33,13 +33,16 @@ def install():
         AutoModelForCausalLM=object, AutoTokenizer=object, BitsAndBytesConfig=object,
         get_linear_schedule_with_warmup=lambda opt, warm, total: types.SimpleNamespace(step=lambda: None))
     try:
+        import tqdm  # noqa: F401
         import tqdm.auto  # noqa: F401
     except ImportError:
-        fake_tqdm = types.ModuleType("tqdm.auto")
         class _Bar:
             def __init__(self, it, **k): self.it = it
             def __iter__(self): return iter(self.it)
             def set_postfix(self, **k): pass
-        fake_tqdm.tqdm = _Bar
-        sys.modules["tqdm"] = types.ModuleType("tqdm")
-        sys.modules["tqdm.auto"] = fake_tqdm
+        base = types.ModuleType("tqdm")
+        auto = types.ModuleType("tqdm.auto")
+        base.tqdm = auto.tqdm = _Bar          # works for both "from tqdm import tqdm" and "from tqdm.auto import tqdm"
+        base.auto = auto
+        sys.modules["tqdm"] = base
+        sys.modules["tqdm.auto"] = auto

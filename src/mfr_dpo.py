@@ -16,7 +16,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
-from tqdm.auto import tqdm
+from tqdm import tqdm 
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, get_linear_schedule_with_warmup
 
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
@@ -252,7 +252,7 @@ def train_stage(model, tokenizer, df, beta=0.1, lr=5e-5, pairs_per_step=16, micr
 def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.1, lr=1e-4,
                        new_per_step=16, old_per_step=2, refreshes=5, micro_batch=2,
                        max_tokens=1024, seed=0, max_share_per_dataset=None, score_batch_size=4,
-                       desc="training"):
+                       desc="training", progress_path=None, save_every=25):
     """One epoch over df, with `old_per_step` replayed pairs added to every step.
 
     Same budget for every method: the same 2,000 new pairs, in the same order, in the same number of
@@ -331,6 +331,8 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
         bar.set_postfix(loss=f"{sum(h['loss'] for h in recent) / len(recent):.3f}",
                         acc=f"{sum(h['train_acc'] for h in recent) / len(recent):.2f}",
                         replayed=len(replay_log))
+        if progress_path and (step + 1) % save_every == 0:
+            pd.DataFrame(history).to_csv(progress_path, index=False)   # so Drive shows progress mid-stage
 
     minutes = (time.time() - start) / 60
     print(f"Done: {len(rows)} new pairs + {len(replay_log)} replayed in {minutes:.1f} min "
