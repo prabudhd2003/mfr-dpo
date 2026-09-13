@@ -6,10 +6,11 @@ already learned. For every stored pair we keep:
     peak_margin     its margin right after its own stage finished ("how well it was learned")
     current_margin  its margin the last time we re-scored the buffer
 
-The four methods differ only in which stored pairs fill the 2 replay slots of each training step:
+The methods differ in which stored pairs fill the replay slots of each training step:
 
     none            nothing is replayed
     random          uniform sample from the buffer
+    random_high     uniform sample from the buffer with a larger budget set by the runner
     lowest_margin   the lowest current_margin (hard pairs, forgotten or not)
     mfr             the largest drop, peak_margin - current_margin (our method)
 
@@ -22,7 +23,7 @@ import pandas as pd
 
 from mfr_utils import buffer_seed
 
-METHODS = ("none", "random", "lowest_margin", "mfr")
+METHODS = ("none", "random", "random_high", "lowest_margin", "mfr")
 EXTRA_COLUMNS = ["dataset", "peak_margin", "current_margin"]
 
 
@@ -120,7 +121,7 @@ class ReplayBuffer:
 def plan_interval(buffer, method, n_slots, rng, max_share_per_dataset=None):
     """Pair ids for the next interval's replay slots (one id per slot, in order).
 
-    none: empty list. random: uniform without replacement. lowest_margin: lowest current margin.
+    none: empty list. random/random_high: uniform without replacement. lowest_margin: lowest current margin.
     mfr: largest peak - current. Ties are broken randomly with `rng`. If the buffer has fewer pairs
     than slots, the ranking is cycled (each pair replayed more than once).
     max_share_per_dataset (e.g. 0.75) caps how much of one interval a single dataset may fill.
@@ -139,7 +140,7 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
     rows = buffer.rows()
     tiebreak = rng.random(len(rows))
 
-    if method == "random":
+    if method in ("random", "random_high"):
         score = tiebreak
         order = np.argsort(tiebreak)                                     # a random permutation
     elif method == "lowest_margin":

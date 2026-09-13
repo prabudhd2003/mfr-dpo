@@ -19,7 +19,7 @@ The cache is an optimization, not a different algorithm. If it is missing, noteb
 
 ## 2. Core experiment grid
 
-Run all 12 configurations below. Start with `none` for each order/seed because its stage-1 artifact is reused by the two replay methods.
+Run all 12 core configurations below. Start with `none` for each order/seed because its stage-1 artifact is reused by the replay methods.
 
 | Order | Seed | Method | Run name | Stage-1 source |
 |---:|---:|---|---|---|
@@ -36,24 +36,36 @@ Run all 12 configurations below. Start with `none` for each order/seed because i
 | 2 | 1 | random | `v2_o2_random_s1` | `.../runs/v2_o2_none_s1` |
 | 2 | 1 | mfr | `v2_o2_mfr_s1` | `.../runs/v2_o2_none_s1` |
 
-Optionally add four `lowest_margin` runs after the core grid. They use the same matching stage-1 sources.
+Then run the four higher-budget random controls. These are additions, not replacements for the 12 core runs.
+`random_high` uses the same uniform selection rule as `random`, with 18 new plus 3 old pairs per full step
+(14.3% replay). It reuses the matching no-replay stage 1 because no replay occurs in stage 1.
+
+| Order | Seed | Method | Run name | Stage-1 source |
+|---:|---:|---|---|---|
+| 1 | 0 | random_high | `v2_o1_random_high_s0` | `.../runs/v2_o1_none_s0` |
+| 1 | 1 | random_high | `v2_o1_random_high_s1` | `.../runs/v2_o1_none_s1` |
+| 2 | 0 | random_high | `v2_o2_random_high_s0` | `.../runs/v2_o2_none_s0` |
+| 2 | 1 | random_high | `v2_o2_random_high_s1` | `.../runs/v2_o2_none_s1` |
+
+Optionally add four `lowest_margin` runs after these 16 planned runs. They use the same matching stage-1 sources.
 
 For each run, change only `ORDER_ID`, `METHOD`, `SEED`, `START_STAGE`, and `STAGE1_FROM` in notebook 06. All scientific settings come from the protocol file.
 
 ## 3. Resume safely
 
-If stage 1 finished and stage 2 did not, set `START_STAGE = 2`. If stage 2 finished and stage 3 did not, set `START_STAGE = 3`. Use the same order, method, seed, Drive folder, Git commit, data, and cache. The runner loads the preceding adapter, buffer, and result rows.
+If stage 1 finished and stage 2 did not, set `START_STAGE = 2`. If stage 2 finished and stage 3 did not, set `START_STAGE = 3`. Use the same order, method, seed, Drive folder, scientific code, data, and cache. The runner loads the preceding adapter, buffer, and result rows.
 
 A complete run has `COMPLETE.json`. Do not include partial runs in final tables.
 
-The runner rejects an uncommitted checkout, a different commit/settings combination on resume, a completed
-run that would be overwritten, altered data files, and a reference cache that fails its live numerical canary.
+The runner rejects an uncommitted checkout, different scientific code or settings on resume, a completed run
+that would be overwritten, altered data files, and a reference cache that fails its live numerical canary. It
+still records the exact Git commit, but notebook/documentation-only commits no longer invalidate stage-1 reuse.
 
 ## 4. Validation analysis and decision
 
 Run notebooks 07 and 08 after the core grid. Report both normalized and summed metrics.
 
-The main question is whether MFR improves retention relative to random replay across matched order/seed cells while keeping current-stage validation accuracy within the predeclared 2-point tolerance. Use per-pair paired bootstrap intervals; do not treat 600 pooled validation pairs as independent of order and seed.
+The main question is whether MFR improves retention relative to random replay across matched order/seed cells while keeping current-stage validation accuracy within the predeclared 2-point tolerance. The secondary `random_high` comparison asks whether 10% MFR matches or beats random replay with a 14.3% budget. Use per-pair paired bootstrap intervals; do not treat 600 pooled validation pairs as independent of order and seed.
 
 Write the model-selection decision and chosen runs into the report notes before opening test outcomes.
 

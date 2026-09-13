@@ -9,7 +9,7 @@
     "2": ["safe", "helpful", "quality"]
   },
   "methods": ["none", "random", "mfr"],
-  "secondary_methods": ["lowest_margin"],
+  "secondary_methods": ["random_high", "lowest_margin"],
   "seeds": [0, 1],
   "train_pairs": 2000,
   "val_pairs": 200,
@@ -23,6 +23,9 @@
   "epochs": 1,
   "new_per_step": 18,
   "old_per_step": 2,
+  "old_per_step_overrides": {
+    "random_high": 3
+  },
   "micro_batch": 2,
   "buffer_size": 500,
   "refreshes": 5,
@@ -36,4 +39,3 @@
     "batch_size": 4
   }
 }
-

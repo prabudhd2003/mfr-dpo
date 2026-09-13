@@ -95,7 +95,7 @@ def test_none_replays_nothing():
 
 def test_every_method_fills_exactly_the_slots():
     buffer = filled_buffer(size=50, two_stages=True)
-    for method in ("random", "lowest_margin", "mfr"):
+    for method in ("random", "random_high", "lowest_margin", "mfr"):
         plan = plan_interval(buffer, method, 24, np.random.default_rng(0))
         assert len(plan) == 24
         assert set(plan) <= set(buffer.rows()["id"])
@@ -143,6 +143,13 @@ def test_random_is_uniform_and_seeded():
     c = plan_interval(buffer, "random", 10, np.random.default_rng(1))
     assert a == b and a != c
     assert len(set(a)) == 10                              # no pair twice in one interval
+
+
+def test_random_high_uses_the_same_seeded_selection_rule():
+    buffer = filled_buffer(size=50)
+    regular = plan_interval(buffer, "random", 10, np.random.default_rng(0))
+    high = plan_interval(buffer, "random_high", 10, np.random.default_rng(0))
+    assert high == regular
 
 
 def test_more_slots_than_pairs_cycles():

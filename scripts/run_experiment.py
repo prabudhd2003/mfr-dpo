@@ -15,15 +15,18 @@ import mfr_cache
 import mfr_data
 import mfr_dpo
 from mfr_replay import ReplayBuffer
-from mfr_utils import (file_sha256, load_protocol, mark_run_complete, run_info, save_json_atomic,
-                       seed_everything, stage_seed, validate_resume_settings, validate_stage1_source)
+from mfr_utils import (file_sha256, load_protocol, mark_run_complete, method_old_per_step,
+                       run_info, save_json_atomic, seed_everything, stage_seed,
+                       validate_resume_settings, validate_stage1_source)
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--drive-dir", required=True, help="Shared mfr-dpo folder containing runs/")
     parser.add_argument("--order", type=int, choices=(1, 2), required=True)
-    parser.add_argument("--method", choices=("none", "random", "lowest_margin", "mfr"), required=True)
+    parser.add_argument(
+        "--method", choices=("none", "random", "random_high", "lowest_margin", "mfr"), required=True
+    )
     parser.add_argument("--seed", type=int, choices=(0, 1), required=True)
     parser.add_argument("--start-stage", type=int, choices=(1, 2, 3), default=1)
     parser.add_argument("--stage1-from", help="Compatible completed run directory whose stage 1 should be reused")
@@ -79,6 +82,7 @@ def main():
     args = parse_args()
     protocol = load_protocol(ROOT / "configs" / "experiment_protocol.json")
     order = protocol["orders"][str(args.order)]
+    old_per_step = method_old_per_step(protocol, args.method)
     run_name = f"v2_o{args.order}_{args.method}_s{args.seed}"
     run_dir = Path(args.drive_dir) / "runs" / run_name
     data_dir = ROOT / protocol["data_dir"]
@@ -100,7 +104,7 @@ def main():
         "data_version": protocol["data_version"], "data_manifest_sha256": manifest_hash,
         "model_name": protocol["model_name"], "model_revision": protocol["model_revision"],
         "lr": protocol["learning_rate"], "beta": protocol["beta"],
-        "new_per_step": protocol["new_per_step"], "old_per_step": protocol["old_per_step"],
+        "new_per_step": protocol["new_per_step"], "old_per_step": old_per_step,
         "max_tokens": protocol["max_tokens"], "buffer_size": protocol["buffer_size"],
         "refreshes": protocol["refreshes"], "stage1_from": args.stage1_from,
         "stage1_run_name": Path(args.stage1_from).name if args.stage1_from else None,
@@ -123,6 +127,7 @@ def main():
         validate_resume_settings(current_record, old)
         resume_event = {
             "resumed": current_info.get("started"), "git_commit": current_info.get("git_commit"),
+            "scientific_code_sha256": current_info.get("scientific_code_sha256"),
             "gpu": current_info.get("gpu"), "packages": current_info.get("packages"),
         }
         saved_settings = {**old, "resume_events": [*old.get("resume_events", []), resume_event]}
@@ -195,7 +200,7 @@ def main():
         history, replay_log = mfr_dpo.train_stage_replay(
             model, tokenizer, splits[dataset]["train"], buffer=buffer, method=args.method,
             beta=protocol["beta"], lr=protocol["learning_rate"],
-            new_per_step=protocol["new_per_step"], old_per_step=protocol["old_per_step"],
+            new_per_step=protocol["new_per_step"], old_per_step=old_per_step,
             refreshes=protocol["refreshes"], micro_batch=protocol["micro_batch"],
             max_tokens=protocol["max_tokens"], seed=stage_seed(args.seed, stage),
             max_share_per_dataset=protocol["max_share_per_dataset"],

@@ -10,6 +10,16 @@ import subprocess
 import tempfile
 
 
+SCIENTIFIC_CODE_PATHS = (
+    "scripts/run_experiment.py",
+    "src/mfr_cache.py",
+    "src/mfr_data.py",
+    "src/mfr_dpo.py",
+    "src/mfr_replay.py",
+    "src/mfr_utils.py",
+)
+
+
 def seed_everything(seed):
     """Seed Python, NumPy and Torch without forcing slow deterministic kernels."""
     seed = int(seed)
@@ -58,7 +68,18 @@ def load_protocol(path="configs/experiment_protocol.json"):
         raise ValueError("this experiment runner supports exactly one epoch; set epochs to 1")
     if protocol["lora_alpha"] <= 0 or not 0 <= protocol["lora_dropout"] < 1:
         raise ValueError("invalid LoRA alpha/dropout in protocol")
+    known_methods = set(protocol.get("methods", [])) | set(protocol.get("secondary_methods", []))
+    for method, old_per_step in protocol.get("old_per_step_overrides", {}).items():
+        if method not in known_methods:
+            raise ValueError(f"old_per_step override names unknown method {method!r}")
+        if not isinstance(old_per_step, int) or old_per_step <= 0:
+            raise ValueError(f"old_per_step override for {method!r} must be a positive integer")
     return protocol
+
+
+def method_old_per_step(protocol, method):
+    """Return the recorded replay budget for one method."""
+    return int(protocol.get("old_per_step_overrides", {}).get(method, protocol["old_per_step"]))
 
 
 def file_sha256(path, chunk_size=1024 * 1024):
@@ -67,6 +88,23 @@ def file_sha256(path, chunk_size=1024 * 1024):
     with open(path, "rb") as stream:
         for chunk in iter(lambda: stream.read(chunk_size), b""):
             digest.update(chunk)
+    return digest.hexdigest()
+
+
+def scientific_code_sha256(repo_dir="."):
+    """Hash only code that can change training/scoring, independent of Git history."""
+    root = Path(repo_dir)
+    digest = hashlib.sha256()
+    for relative in SCIENTIFIC_CODE_PATHS:
+        path = root / relative
+        if not path.is_file():
+            raise FileNotFoundError(f"scientific code file is missing: {path}")
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        with open(path, "rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        digest.update(b"\0")
     return digest.hexdigest()
 
 
@@ -88,8 +126,8 @@ def save_json_atomic(value, path):
 def validate_stage1_source(settings, source_settings):
     """Reject a borrowed stage-1 checkpoint produced by an incompatible run."""
     keys = ("protocol_version", "data_version", "data_manifest_sha256", "model_name", "model_revision",
-            "order_id", "seed", "lr", "beta", "new_per_step", "old_per_step", "max_tokens",
-            "lora_r", "lora_alpha", "lora_dropout", "epochs", "git_commit")
+            "order_id", "seed", "lr", "beta", "new_per_step", "max_tokens",
+            "lora_r", "lora_alpha", "lora_dropout", "epochs", "scientific_code_sha256")
     mismatches = {key: (settings.get(key), source_settings.get(key))
                   for key in keys if settings.get(key) != source_settings.get(key)}
     if mismatches:
@@ -104,7 +142,7 @@ def validate_resume_settings(settings, saved):
     keys = ("run_name", "order_id", "order", "method", "seed", "protocol_version", "data_version",
             "data_manifest_sha256", "model_name", "model_revision", "lr", "beta", "new_per_step",
             "old_per_step", "max_tokens", "buffer_size", "refreshes", "lora_r", "lora_alpha",
-            "lora_dropout", "epochs", "stage1_run_name", "git_commit")
+            "lora_dropout", "epochs", "stage1_run_name", "scientific_code_sha256")
     mismatches = {key: (settings.get(key), saved.get(key))
                   for key in keys if settings.get(key) != saved.get(key)}
     if mismatches:
@@ -128,6 +166,7 @@ def run_info(repo_dir="."):
     info = {
         "git_commit": _git_commit(repo_dir, short=False),
         "git_dirty": _git_dirty(repo_dir),
+        "scientific_code_sha256": scientific_code_sha256(repo_dir),
         "gpu": _gpu_name(),
         "packages": _versions(),
         "deterministic_gpu_kernels": False,

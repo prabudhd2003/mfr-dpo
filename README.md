@@ -15,7 +15,7 @@ Protocol v2 fixes those issues. Its authoritative settings live in [`configs/exp
 - Data: 2,000 train / 200 validation / 300 locked test pairs for each behavior.
 - Global normalized-prompt de-duplication across datasets and splits.
 - Two orders: helpful → safe → quality; safe → helpful → quality.
-- Core methods: no replay, random replay, MFR. Lowest-margin replay is secondary.
+- Core methods: no replay, 10% random replay, and 10% MFR. A 14.3% `random_high` budget control and lowest-margin replay are secondary.
 - Seeds: 0 and 1.
 - Replay-enabled batch: 18 new + 2 old = exactly 10% replay.
 - Buffer: 500 pairs, rebalanced across learned behaviors.
@@ -33,12 +33,12 @@ Commit and push these code changes before opening Colab, because the notebooks p
 1. Run `01_load_data.ipynb` once; review with `02_data_review.ipynb`; commit `data/v2`.
 2. Run `05_build_reference_cache.ipynb` once.
 3. In `06_run_experiment.ipynb`, run the two v2 no-replay baselines for both seeds.
-4. Run matched random and MFR runs, reusing the compatible v2 no-replay stage 1.
+4. Run matched random, MFR, and higher-budget random runs, reusing the compatible v2 no-replay stage 1.
 5. Run `07_compare_runs.ipynb`; then `08_error_analysis.ipynb`.
 6. Freeze the final model-selection decision. Only then run `09_final_test_eval.ipynb` once.
 7. Run `10_generation_eval.ipynb`, automatic behavior evaluators, and `11_blind_review.ipynb`.
 
-The exact 12-run core grid and resume instructions are in the runbook.
+The exact 12-run core grid, four-run higher-budget random addition, and resume instructions are in the runbook.
 
 ## Repository map
 

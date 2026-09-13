@@ -12,7 +12,9 @@ uniform random replay while keeping new-behavior learning within two accuracy po
 - Model: `Qwen/Qwen2.5-1.5B-Instruct`, pinned by the revision in `configs/experiment_protocol.json`.
 - Data: version 2 splits in `data/v2/`, 2,000 train / 200 validation / 300 test pairs per behavior.
 - Orders: helpful -> safe -> quality and safe -> helpful -> quality.
-- Core methods: no replay, random replay, MFR. Lowest-current-margin replay is secondary.
+- Core methods: no replay, 10% random replay, and 10% MFR. `random_high` is a secondary
+  retention/plasticity control using 18 new plus 3 uniformly sampled old pairs (14.3% replay).
+  Lowest-current-margin replay remains optional and secondary.
 - Seeds: 0 and 1. Stage 1 is shared only after its complete configuration and file hashes are validated.
 - Training: one epoch, 18 new pairs plus 2 old pairs per full optimizer step, beta 0.1, learning rate 1e-4.
   A final partial batch gets proportionally fewer old pairs, making the aggregate replay share as close to 10%
@@ -20,8 +22,10 @@ uniform random replay while keeping new-behavior learning within two accuracy po
 - Replay: 500 stored pairs, five selection intervals per later stage, at most 75% from one old behavior when
   enough other behavior data exists.
 
-The runner refuses dirty Git checkouts, preserves original run provenance across resumes, verifies every JSONL
+The runner refuses dirty Git checkouts, preserves original Git provenance across resumes, verifies every JSONL
 against the data manifest, and checks a 32-pair cached-reference sample against live computation before training.
+Checkpoint compatibility uses a SHA-256 fingerprint of the executable training/scoring code rather than the
+whole Git commit, so documentation or notebook-only commits do not invalidate a scientifically identical stage 1.
 
 ## Metrics
 
@@ -37,6 +41,10 @@ if its new-stage gain is more than two points below random replay.
 All primary comparisons are paired by order, seed, validation pair, data version, model revision, and update
 budget. Report every order-seed cell and paired bootstrap confidence intervals. Do not average margin-retention
 ratios across behaviors.
+
+The `random_high` comparison is not part of the equal-budget primary claim. It tests whether 10% MFR can match or
+beat a more conservative random baseline that receives 3 old pairs per full step. Report its extra examples and
+runtime explicitly.
 
 ## Test lock and generation
 

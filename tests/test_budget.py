@@ -1,4 +1,4 @@
-"""Every replay method must get exactly the same training budget. CPU only: pytest -q
+"""Core methods share a budget; random_high deliberately gets one extra replay slot. CPU only: pytest -q
 
 These tests run train_stage_replay with a fake model: torch and the DPO loss are replaced by
 stand-ins (see tests/fake_deps.py), so we can check the bookkeeping -- which pairs go into which
@@ -86,6 +86,17 @@ def test_frozen_default_is_exactly_ten_percent_replay():
     assert (history["n_new"] == 18).all() and (history["n_replay"] == 2).all()
 
 
+def test_high_budget_random_uses_three_replay_pairs_per_full_step():
+    dpo = load_dpo()
+    history, log = dpo.train_stage_replay(
+        FakeModel(), None, split("helpful", 180), buffer=buffer_with(), method="random_high",
+        new_per_step=18, old_per_step=3, seed=2,
+    )
+    assert len(history) == 10
+    assert (history["n_new"] == 18).all() and (history["n_replay"] == 3).all()
+    assert len(log) == 30
+
+
 def test_partial_final_batch_gets_proportional_replay():
     dpo = load_dpo()
     history, log = dpo.train_stage_replay(FakeModel(), None, split("helpful", 20),
@@ -96,7 +107,7 @@ def test_partial_final_batch_gets_proportional_replay():
 
 
 def test_replay_slots_per_step():
-    for method in ("random", "lowest_margin", "mfr"):
+    for method in ("random", "random_high", "lowest_margin", "mfr"):
         history, log = run(method)
         assert (history["n_replay"] == 2).all()                    # exactly 2 old pairs every step
         assert len(log) == 2 * len(history)
@@ -119,7 +130,7 @@ def test_buffer_is_rescored_once_per_interval_except_the_first():
     dpo.scored.clear()
     run("mfr")                                                     # 10 steps, 5 intervals of 2 steps
     assert len(dpo.scored) == 4 and set(dpo.scored) == {100}       # 4 refreshes of the 100-pair buffer
-    for method in ("random", "none"):
+    for method in ("random", "random_high", "none"):
         dpo.scored.clear()
         run(method)
         assert dpo.scored == []                                    # these never re-score
