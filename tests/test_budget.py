@@ -42,7 +42,7 @@ def load_dpo():
     import mfr_dpo
 
     mfr_dpo.make_batch = lambda tokenizer, rows, max_tokens=1024: {"rows": rows}
-    mfr_dpo.dpo_loss = lambda model, batch, beta: (FakeLoss(), 0.5)
+    mfr_dpo.dpo_loss = lambda model, batch, beta, **kwargs: (FakeLoss(), 0.5)
     mfr_dpo.scored = []                       # how many pairs each buffer re-scoring saw
 
     def fake_score(model, tokenizer, df, **kwargs):
@@ -76,6 +76,23 @@ def test_same_steps_for_every_method():
     for method in mfr_replay.METHODS:
         history, _ = run(method)
         assert len(history) == 10                                  # 160 new pairs / 16 per step
+
+
+def test_frozen_default_is_exactly_ten_percent_replay():
+    dpo = load_dpo()
+    history, _ = dpo.train_stage_replay(FakeModel(), None, split("helpful", 180),
+                                         buffer=buffer_with(), method="random", seed=2)
+    assert len(history) == 10
+    assert (history["n_new"] == 18).all() and (history["n_replay"] == 2).all()
+
+
+def test_partial_final_batch_gets_proportional_replay():
+    dpo = load_dpo()
+    history, log = dpo.train_stage_replay(FakeModel(), None, split("helpful", 20),
+                                           buffer=buffer_with(), method="random", seed=2)
+    assert history["n_new"].tolist() == [18, 2]
+    assert history["n_replay"].tolist() == [2, 0]
+    assert len(log) == 2
 
 
 def test_replay_slots_per_step():

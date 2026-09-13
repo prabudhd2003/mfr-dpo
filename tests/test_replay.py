@@ -52,6 +52,12 @@ def test_buffer_size_and_even_split():
     assert len(buffer) == 100 and counts["safe"] == 50 and counts["helpful"] == 50
 
 
+def test_buffer_remainder_is_not_silently_dropped():
+    buffer = filled_buffer(size=101, two_stages=True)
+    assert len(buffer) == 101
+    assert sorted(buffer.rows()["dataset"].value_counts().tolist()) == [50, 51]
+
+
 def test_current_starts_at_peak_and_updates():
     buffer = filled_buffer(size=20)
     rows = buffer.rows()

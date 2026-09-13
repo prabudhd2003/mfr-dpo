@@ -20,7 +20,7 @@ def install():
         def __enter__(self): return self
         def __exit__(self, *exc): return False
     torch.no_grad = _NoGrad
-    torch.bfloat16 = torch.float16 = "dtype"
+    torch.bfloat16 = torch.float16 = torch.float32 = "dtype"
     torch.zeros = lambda *a, **k: None
     torch.tensor = lambda *a, **k: None
     sys.modules["torch"] = torch

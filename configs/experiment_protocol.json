@@ -1,0 +1,39 @@
+{
+  "protocol_version": "2.0",
+  "data_version": "v2",
+  "data_dir": "data/v2",
+  "model_name": "Qwen/Qwen2.5-1.5B-Instruct",
+  "model_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+  "orders": {
+    "1": ["helpful", "safe", "quality"],
+    "2": ["safe", "helpful", "quality"]
+  },
+  "methods": ["none", "random", "mfr"],
+  "secondary_methods": ["lowest_margin"],
+  "seeds": [0, 1],
+  "train_pairs": 2000,
+  "val_pairs": 200,
+  "test_pairs": 300,
+  "max_tokens": 1024,
+  "lora_r": 16,
+  "lora_alpha": 32,
+  "lora_dropout": 0.05,
+  "beta": 0.1,
+  "learning_rate": 0.0001,
+  "epochs": 1,
+  "new_per_step": 18,
+  "old_per_step": 2,
+  "micro_batch": 2,
+  "buffer_size": 500,
+  "refreshes": 5,
+  "max_share_per_dataset": 0.75,
+  "primary_metric": "accuracy",
+  "secondary_metric": "accuracy_sum",
+  "new_learning_tolerance_points": 2.0,
+  "generation": {
+    "do_sample": false,
+    "max_new_tokens": 512,
+    "batch_size": 4
+  }
+}
+

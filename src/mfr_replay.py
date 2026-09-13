@@ -49,7 +49,8 @@ class ReplayBuffer:
         """Store a finished stage's candidates with their peak margins, then rebalance the buffer.
 
         peak_margin: Series indexed by pair id (from mfr_dpo.score_pairs(...)["margin"]).
-        After this call every stored dataset holds size // (number of datasets) pairs.
+        After this call the full buffer has exactly ``size`` rows whenever enough candidates exist;
+        any remainder is assigned deterministically to the earliest stored datasets.
         current_margin starts equal to peak_margin.
         """
         new = rows.copy()
@@ -67,12 +68,13 @@ class ReplayBuffer:
     def _rebalance(self):
         """Keep the buffer at `size` pairs, evenly split across the datasets in it (seeded)."""
         datasets = list(dict.fromkeys(self._rows["dataset"]))
-        per_dataset = max(1, self.size // len(datasets))
+        base, remainder = divmod(self.size, len(datasets))
         kept = []
-        for dataset in datasets:
+        for index, dataset in enumerate(datasets):
             part = self._rows[self._rows["dataset"] == dataset]
-            if len(part) > per_dataset:
-                part = part.sample(n=per_dataset, random_state=buffer_seed(self.seed, dataset) + len(datasets))
+            target = base + (1 if index < remainder else 0)
+            if len(part) > target:
+                part = part.sample(n=target, random_state=buffer_seed(self.seed, dataset) + len(datasets))
             kept.append(part.sort_values("id"))
         self._rows = pd.concat(kept, ignore_index=True)
 
@@ -123,28 +125,55 @@ def plan_interval(buffer, method, n_slots, rng, max_share_per_dataset=None):
     than slots, the ranking is cycled (each pair replayed more than once).
     max_share_per_dataset (e.g. 0.75) caps how much of one interval a single dataset may fill.
     """
+    details = plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset)
+    return details["id"].tolist() if len(details) else []
+
+
+def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=None):
+    """Return the replay plan with auditable rank, score, dataset, and selection rule."""
     if method not in METHODS:
         raise ValueError(f"unknown replay method {method!r}; expected one of {METHODS}")
     if method == "none" or buffer is None or len(buffer) == 0 or n_slots <= 0:
-        return []
+        return pd.DataFrame(columns=["id", "dataset", "selection_score", "selection_rank", "method"])
 
     rows = buffer.rows()
     tiebreak = rng.random(len(rows))
 
     if method == "random":
+        score = tiebreak
         order = np.argsort(tiebreak)                                     # a random permutation
     elif method == "lowest_margin":
+        score = -rows["current_margin"].to_numpy()
         order = np.lexsort((tiebreak, rows["current_margin"].to_numpy()))          # ascending
     else:  # mfr
         drop = (rows["peak_margin"] - rows["current_margin"]).to_numpy()
+        score = drop
         order = np.lexsort((tiebreak, -drop))                                      # largest drop first
 
-    ranked = rows.iloc[order]
+    ranked = rows.iloc[order].copy()
+    ranked["selection_score"] = score[order]
+    ranked["selection_rank"] = np.arange(1, len(ranked) + 1)
     if max_share_per_dataset is not None:
         ranked = _apply_cap(ranked, n_slots, max_share_per_dataset)
 
-    ids = ranked["id"].tolist()
-    return [ids[i % len(ids)] for i in range(n_slots)]
+    repeats = [ranked.iloc[i % len(ranked)].copy() for i in range(n_slots)]
+    selected = pd.DataFrame(repeats).reset_index(drop=True)
+    selected["method"] = method
+    return selected[["id", "dataset", "selection_score", "selection_rank", "method"]]
+
+
+def diagnostics(buffer):
+    """Compact diagnostics for plotting and checking the state of the replay memory."""
+    rows = buffer.rows().copy()
+    if not len(rows):
+        return pd.DataFrame(columns=["dataset", "pairs", "mean_peak", "mean_current", "mean_forgetting"])
+    rows["forgetting"] = rows["peak_margin"] - rows["current_margin"]
+    return rows.groupby("dataset", as_index=False).agg(
+        pairs=("id", "size"),
+        mean_peak=("peak_margin", "mean"),
+        mean_current=("current_margin", "mean"),
+        mean_forgetting=("forgetting", "mean"),
+    )
 
 
 def _apply_cap(ranked, n_slots, max_share):
