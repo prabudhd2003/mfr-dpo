@@ -84,12 +84,18 @@ def main():
     order = protocol["orders"][str(args.order)]
     old_per_step = method_old_per_step(protocol, args.method)
     run_name = f"v2_o{args.order}_{args.method}_s{args.seed}"
+    print(
+        f"Starting {run_name}: order={' -> '.join(order)}, "
+        f"batch={protocol['new_per_step']} new + {old_per_step if args.method != 'none' else 0} replay",
+        flush=True,
+    )
     run_dir = Path(args.drive_dir) / "runs" / run_name
     data_dir = ROOT / protocol["data_dir"]
     manifest_path = data_dir / "manifest.json"
     if not manifest_path.exists():
         raise FileNotFoundError(f"Run scripts/prepare_data.py first; missing {manifest_path}")
     manifest_hash = file_sha256(manifest_path)
+    print("Loading and verifying the frozen data...", flush=True)
     splits = mfr_data.load_splits(data_dir)  # also verifies every JSONL against the manifest
     reference_cache = None
     if args.reference_cache:
@@ -173,11 +179,13 @@ def main():
         first_stage = 2
 
     seed_everything(args.seed)
+    print(f"Loading {protocol['model_name']} and the starting adapter...", flush=True)
     model, tokenizer = mfr_dpo.load_model(
         protocol["model_name"], protocol["lora_r"], adapter_path=previous_adapter,
         revision=protocol["model_revision"],
         lora_alpha=protocol["lora_alpha"], lora_dropout=protocol["lora_dropout"],
     )
+    print("Model loaded.", flush=True)
     if reference_cache is not None:
         canary = mfr_cache.verify_reference_cache(
             model, tokenizer, splits["helpful"]["val"], reference_cache,
@@ -195,6 +203,7 @@ def main():
 
     for stage in range(first_stage, 4):
         dataset = order[stage - 1]
+        print(f"\nStage {stage}/3: training on {dataset}", flush=True)
         stage_dir = run_dir / f"stage{stage}_{dataset}"
         stage_dir.mkdir(parents=True, exist_ok=True)
         history, replay_log = mfr_dpo.train_stage_replay(
@@ -208,6 +217,7 @@ def main():
             reference_cache=reference_cache,
         )
         model.save_pretrained(stage_dir)
+        print(f"Stage {stage}/3 training saved; scoring validation sets...", flush=True)
         history.to_csv(stage_dir / "history.csv", index=False)
         replay_log.to_csv(stage_dir / "replay_log.csv", index=False)
         stage_results = score_sets(

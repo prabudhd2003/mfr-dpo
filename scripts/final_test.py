@@ -28,6 +28,7 @@ def main():
         raise ValueError("only v2 runs may be used for final test evaluation")
     final_dataset = settings["order"][-1]
     adapter = run_dir / f"stage3_{final_dataset}"
+    print(f"Loading final checkpoint for {settings['run_name']}...", flush=True)
     model, tokenizer = mfr_dpo.load_model(
         protocol["model_name"], protocol["lora_r"], adapter_path=adapter,
         revision=protocol["model_revision"],
@@ -35,6 +36,7 @@ def main():
     )
     splits = mfr_data.load_splits(ROOT / protocol["data_dir"])
     test = {dataset: parts["test"] for dataset, parts in splits.items()}
+    print("Model loaded. Scoring the three locked test sets...", flush=True)
     print(mfr_eval.score_checkpoint(
         model, tokenizer, test, run_dir / "final_test", beta=protocol["beta"],
         max_tokens=protocol["max_tokens"]

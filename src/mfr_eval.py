@@ -49,7 +49,10 @@ def generate_responses(model, tokenizer, prompts, batch_size=4, max_new_tokens=5
     old_padding_side = tokenizer.padding_side
     tokenizer.padding_side = "left"
     model.config.use_cache = True
-    for start in tqdm(range(0, len(rows), batch_size), desc="generating", leave=False):
+    for start in tqdm(
+        range(0, len(rows), batch_size), desc="generating", unit="batch", leave=True,
+        dynamic_ncols=True,
+    ):
         chunk = rows[start:start + batch_size]
         rendered = [chat_prompt(tokenizer, row["prompt"]) for row in chunk]
         inputs = tokenizer(rendered, return_tensors="pt", padding=True).to(model.device)
@@ -77,7 +80,9 @@ def save_generations(generations, output_path, metadata=None):
 def run_evaluator(generations, evaluator, output_path=None):
     """Run any evaluator callable(response row -> dict) without coupling training to one package."""
     rows = []
-    for record in generations.to_dict("records"):
+    records = generations.to_dict("records")
+    for record in tqdm(records, desc="evaluating generations", unit="response", leave=True,
+                       dynamic_ncols=True):
         result = evaluator(record)
         rows.append({"id": record.get("id"), **result})
     scores = pd.DataFrame(rows)

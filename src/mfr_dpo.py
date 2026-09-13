@@ -142,7 +142,9 @@ def score_pairs(model, tokenizer, df, beta=0.1, batch_size=4, max_tokens=1024,
     order = sorted(range(len(rows)), key=lambda i: pair_length(rows[i]) if "prompt_tokens" in rows[i] else 0)
     columns = {name: [0.0] * len(rows) for name in
                ("margin", "margin_sum", "policy_margin", "policy_margin_sum")}
-    for start in tqdm(range(0, len(rows), batch_size), desc=desc, unit="batch", leave=False):
+    for start in tqdm(
+        range(0, len(rows), batch_size), desc=desc, unit="batch", leave=True, dynamic_ncols=True
+    ):
         indices = order[start:start + batch_size]
         batch = make_batch(tokenizer, [rows[i] for i in indices], max_tokens)
         policy, reference, lengths = policy_and_reference(model, batch, reference_cache)
@@ -223,7 +225,7 @@ def train_stage(model, tokenizer, df, beta=0.1, lr=1e-4, pairs_per_step=18, micr
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
     started, history = time.time(), []
-    bar = tqdm(range(n_steps), desc=desc, unit="step")
+    bar = tqdm(range(n_steps), desc=desc, unit="step", leave=True, dynamic_ncols=True)
     for step in bar:
         pairs = rows[step * pairs_per_step:(step + 1) * pairs_per_step]
         if "prompt_tokens" in pairs[0]:
@@ -237,6 +239,7 @@ def train_stage(model, tokenizer, df, beta=0.1, lr=1e-4, pairs_per_step=18, micr
                         "examples_seen": sum(item["n_new"] for item in history) + len(pairs),
                         "minutes": (time.time() - started) / 60, "scoring_minutes": 0.0,
                         "peak_gpu_gb": _peak_gb()})
+        bar.set_postfix(loss=f"{loss:.4f}", accuracy=f"{100 * accuracy:.1f}%")
     print(f"Done: {len(rows)} pairs in {(time.time() - started) / 60:.1f} min, peak {_peak_gb():.1f} GB")
     return pd.DataFrame(history)
 
@@ -265,7 +268,7 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
     history, replay_log = [], []
     plan = pd.DataFrame()
     plan_at = 0
-    bar = tqdm(range(n_steps), desc=desc, unit="step")
+    bar = tqdm(range(n_steps), desc=desc, unit="step", leave=True, dynamic_ncols=True)
     for step in bar:
         interval = step // interval_len
         if replaying and step % interval_len == 0:
@@ -307,6 +310,8 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
             "scoring_minutes": scoring_seconds / 60,
             "peak_gpu_gb": _peak_gb(),
         })
+        bar.set_postfix(loss=f"{loss:.4f}", accuracy=f"{100 * accuracy:.1f}%",
+                        replay=len(old_ids))
         if progress_path and (step + 1) % save_every == 0:
             pd.DataFrame(history).to_csv(progress_path, index=False)
     elapsed = (time.time() - started) / 60

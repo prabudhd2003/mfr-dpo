@@ -22,7 +22,10 @@ def build_reference_cache(model, tokenizer, df, batch_size=4, max_tokens=1024, d
     was_training = model.training
     model.eval()
     with model.disable_adapter():
-        for start in tqdm(range(0, len(rows), batch_size), desc=desc, leave=False):
+        for start in tqdm(
+            range(0, len(rows), batch_size), desc=desc, unit="batch", leave=True,
+            dynamic_ncols=True,
+        ):
             indices = order[start:start + batch_size]
             sums, _ = response_logprobs(model, make_batch(tokenizer, [rows[i] for i in indices], max_tokens))
             n = len(indices)
