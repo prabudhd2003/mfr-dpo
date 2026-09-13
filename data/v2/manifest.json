@@ -1,0 +1,52 @@
+{
+  "created_at_utc": "2026-09-13T18:38:55.594609+00:00",
+  "data_version": "v2",
+  "files": {
+    "helpful_test.jsonl": {
+      "rows": 300,
+      "sha256": "922042041624a37eea7f58abae788a17569a9eadbace6f3b44a531bd99cc7b77"
+    },
+    "helpful_train.jsonl": {
+      "rows": 2000,
+      "sha256": "c89c470f4501e640de71aac723210907e3fd376df93ac3b51226b2a263f302ea"
+    },
+    "helpful_val.jsonl": {
+      "rows": 200,
+      "sha256": "58d4b2b58e873b591c13ab7438d54ad4ca36752c5399c57722891702e485554c"
+    },
+    "quality_test.jsonl": {
+      "rows": 300,
+      "sha256": "3c82641b1e0d2286a84fac90417c680d9ad9536c780b814102fed4404724b662"
+    },
+    "quality_train.jsonl": {
+      "rows": 2000,
+      "sha256": "dbbb832dc55587a80bd60cb6e38528c52c7526bc930ab76da12eafaa003daa0f"
+    },
+    "quality_val.jsonl": {
+      "rows": 200,
+      "sha256": "55ea0b197dbe1653dcf6751d4ae7857fd6ddd3d3461dce0f57972112c5d0deab"
+    },
+    "safe_test.jsonl": {
+      "rows": 300,
+      "sha256": "11a4358ef261f817f210c3a8b7c0d80a2484b46b5e8a8e4dad800984e5816145"
+    },
+    "safe_train.jsonl": {
+      "rows": 2000,
+      "sha256": "b25f30dcb7376d57b18e00a7a62cea0db3a130799a1d9e0434d2fefa9b6db88c"
+    },
+    "safe_val.jsonl": {
+      "rows": 200,
+      "sha256": "c06197d476cce6934c584efb1fee65d00654cd0521971d1cade12df85bd56a80"
+    }
+  },
+  "max_tokens": 1024,
+  "model_name": "Qwen/Qwen2.5-1.5B-Instruct",
+  "model_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+  "protocol_version": "2.0",
+  "source_revisions": {
+    "helpful": "990b2711a36180dd19d9c94b8627844866f8982a",
+    "quality": "3949bf5f8c17c394422ccfab0c31ea9c20bdeb85",
+    "safe": "9421ffafec3fa40a1f1a7d567b4d525079477ecb"
+  },
+  "split_seed": 0
+}
