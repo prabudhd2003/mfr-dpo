@@ -65,6 +65,7 @@ def load_reference_cache(path, expected=None):
     required = {"id", "chosen_logp", "rejected_logp"}
     if required - set(cache) or cache["id"].duplicated().any():
         raise ValueError(f"invalid reference cache schema: {path}")
+    cache.attrs["manifest"] = manifest
     return cache
 
 
@@ -76,21 +77,38 @@ def merge_reference_caches(caches):
     return combined
 
 
+def _aligned_batch_sample(df, sample_size, batch_size, seed):
+    """Sample complete batches using the same length-sorted grouping used to build the cache."""
+    if len(df) <= sample_size or not {"prompt_tokens", "chosen_tokens", "rejected_tokens"} <= set(df):
+        return df.sample(n=min(sample_size, len(df)), random_state=seed).reset_index(drop=True)
+    rows = df.to_dict("records")
+    order = sorted(range(len(rows)), key=lambda index: pair_length(rows[index]))
+    full_batch_starts = list(range(0, len(order) - batch_size + 1, batch_size))
+    n_batches = min(len(full_batch_starts), max(1, sample_size // batch_size))
+    starts = sorted(pd.Series(full_batch_starts).sample(n=n_batches, random_state=seed).tolist())
+    indices = [index for start in starts for index in order[start:start + batch_size]]
+    return df.iloc[indices].reset_index(drop=True)
+
+
 def verify_reference_cache(model, tokenizer, df, cache, beta=0.1, max_tokens=1024,
-                           sample_size=32, tolerance=1e-3, seed=544):
-    """Canary-check cached margins against live adapter-disabled reference computation."""
-    sample = df.sample(n=min(sample_size, len(df)), random_state=seed).reset_index(drop=True)
+                           sample_size=32, tolerance=1e-3, seed=544, batch_size=None):
+    """Canary-check cached margins using original length-sorted batch boundaries."""
+    manifest = cache.attrs.get("manifest", {})
+    batch_size = int(batch_size or manifest.get("batch_size", 4))
+    sample = _aligned_batch_sample(df, sample_size, batch_size, seed)
     live = score_pairs(
-        model, tokenizer, sample, beta=beta, max_tokens=max_tokens,
+        model, tokenizer, sample, beta=beta, batch_size=batch_size, max_tokens=max_tokens,
         desc="cache canary: live reference", reference_cache=None,
     )
     cached = score_pairs(
-        model, tokenizer, sample, beta=beta, max_tokens=max_tokens,
+        model, tokenizer, sample, beta=beta, batch_size=batch_size, max_tokens=max_tokens,
         desc="cache canary: cached reference", reference_cache=cache,
     )
     margin_difference = (live["margin"] - cached["margin"]).abs()
     diagnostics = {
         "sample_size": len(sample),
+        "batch_size": batch_size,
+        "sampling": "aligned_length_batches",
         "max_abs_margin_difference": float(margin_difference.max()),
         "mean_abs_margin_difference": float(margin_difference.mean()),
         "tolerance": float(tolerance),

@@ -40,6 +40,7 @@ def main():
         "protocol_version": protocol["protocol_version"], "data_version": protocol["data_version"],
         "model_name": protocol["model_name"], "model_revision": protocol["model_revision"],
         "data_manifest_sha256": file_sha256(manifest_path), "max_tokens": protocol["max_tokens"],
+        "batch_size": args.batch_size,
     }
     saved = mfr_cache.save_reference_cache(cache, args.output, metadata)
     print(json.dumps(saved, indent=2))
