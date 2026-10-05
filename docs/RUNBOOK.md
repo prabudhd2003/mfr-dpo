@@ -10,7 +10,7 @@ Update the `carc` branch in the shared CARC repository, then request a short int
 cd /project2/xiangren_1987/grp26-mfr-dpo
 git switch carc
 git pull origin carc
-salloc --partition=gpu --gpus-per-task=a100:1 --constraint=a100-40gb --cpus-per-task=8 --mem=64G --time=02:00:00
+salloc --partition=gpu --ntasks=1 --gpus-per-task=a100:1 --constraint=a100-40gb --cpus-per-task=8 --mem=64G --time=02:00:00
 ```
 
 Create the environment inside that allocation:
