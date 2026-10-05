@@ -18,7 +18,10 @@ WORKER = ROOT / "scripts" / "carc_job.sh"
 def add_common(parser, default_time):
     parser.add_argument("--output-dir", required=True, help="Absolute CARC artifact directory")
     parser.add_argument("--account", help="CARC project account; omit to use your default account")
-    parser.add_argument("--conda-env", default="mfr-dpo")
+    parser.add_argument(
+        "--conda-env", default=str(ROOT / ".conda" / "envs" / "mfr-dpo"),
+        help="Conda environment name or absolute prefix",
+    )
     parser.add_argument("--a100-memory", choices=("40", "80", "any"), default="40")
     parser.add_argument("--time", default=default_time, help="Slurm time limit")
     parser.add_argument("--dry-run", action="store_true", help="Print the sbatch command only")

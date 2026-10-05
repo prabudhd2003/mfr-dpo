@@ -4,13 +4,13 @@ The active experiments run as unattended Slurm jobs on USC CARC. Google Drive an
 
 ## 1. One-time CARC environment
 
-Update the `carc` branch in the shared CARC repository, then request a short interactive A100 session:
+Update the `carc` branch in the shared CARC repository, then request a short interactive CPU session. A GPU is not needed to create the environment or run the automated tests:
 
 ```bash
 cd /project2/xiangren_1987/grp26-mfr-dpo
 git switch carc
 git pull origin carc
-salloc --partition=gpu --ntasks=1 --gpus-per-task=a100:1 --constraint=a100-40gb --cpus-per-task=8 --mem=64G --time=02:00:00
+salloc --partition=main --ntasks=1 --cpus-per-task=4 --mem=16G --time=02:00:00
 ```
 
 Create the environment inside that allocation:
@@ -18,10 +18,13 @@ Create the environment inside that allocation:
 ```bash
 module purge
 module load conda
-mamba create --name mfr-dpo python=3.11 pip -y
+export MFR_CONDA_ROOT=/project2/xiangren_1987/grp26-mfr-dpo/.conda
+export CONDA_PKGS_DIRS="$MFR_CONDA_ROOT/pkgs"
+mkdir -p "$MFR_CONDA_ROOT/envs" "$CONDA_PKGS_DIRS"
+mamba create --prefix "$MFR_CONDA_ROOT/envs/mfr-dpo" python=3.11 pip -y
 eval "$(conda shell.bash hook)"
-conda activate mfr-dpo
-mamba install pytorch pytorch-cuda=11.8 -c pytorch -c nvidia -y
+conda activate "$MFR_CONDA_ROOT/envs/mfr-dpo"
+mamba install --prefix "$MFR_CONDA_ROOT/envs/mfr-dpo" pytorch pytorch-cuda=11.8 -c pytorch -c nvidia -y
 python -m pip install -r requirements.txt
 python -m pip install ipykernel
 python -m pytest -q
