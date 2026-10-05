@@ -24,7 +24,7 @@ mkdir -p "$MFR_CONDA_ROOT/envs" "$CONDA_PKGS_DIRS"
 mamba create --prefix "$MFR_CONDA_ROOT/envs/mfr-dpo" python=3.11 pip -y
 eval "$(conda shell.bash hook)"
 conda activate "$MFR_CONDA_ROOT/envs/mfr-dpo"
-mamba install --prefix "$MFR_CONDA_ROOT/envs/mfr-dpo" pytorch pytorch-cuda=11.8 -c pytorch -c nvidia -y
+mamba install --prefix "$MFR_CONDA_ROOT/envs/mfr-dpo" pytorch pytorch-cuda=11.8 -c pytorch -c nvidia -c defaults -y
 python -m pip install -r requirements.txt
 python -m pip install ipykernel
 python -m pytest -q
