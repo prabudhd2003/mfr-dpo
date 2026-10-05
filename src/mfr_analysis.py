@@ -40,16 +40,19 @@ def read_settings(folder):
     }
 
 
-def load_runs(drive_dir, quiet=False, include_preliminary=True, completed_only=False):
+def load_runs(artifact_dir, quiet=False, include_preliminary=True, completed_only=False,
+              protocol_version=None):
     frames = []
-    for folder in sorted(glob.glob(os.path.join(drive_dir, "runs", "*"))):
+    for folder in sorted(glob.glob(os.path.join(artifact_dir, "runs", "*"))):
         result_path = os.path.join(folder, "results.csv")
         if not os.path.isfile(result_path):
             continue
         if completed_only and not os.path.exists(os.path.join(folder, "COMPLETE.json")):
             continue
         settings = read_settings(folder)
-        if not include_preliminary and settings["protocol_version"] != "2.0":
+        if protocol_version is not None and str(settings["protocol_version"]) != str(protocol_version):
+            continue
+        if not include_preliminary and settings["protocol_version"] == "pre-v2":
             continue
         frame = pd.read_csv(result_path)
         for key in ("run_name", "order_id", "method", "seed", "protocol_version", "data_version"):
@@ -60,9 +63,12 @@ def load_runs(drive_dir, quiet=False, include_preliminary=True, completed_only=F
         frame["stage1_from"] = settings["stage1_from"]
         frames.append(frame)
     if not frames:
-        raise FileNotFoundError(f"no runs with results.csv found under {drive_dir}/runs")
+        raise FileNotFoundError(f"no runs with results.csv found under {artifact_dir}/runs")
     runs = pd.concat(frames, ignore_index=True)
-    runs["method"] = pd.Categorical(runs["method"], METHOD_ORDER, ordered=True)
+    found = list(dict.fromkeys(runs["method"].astype(str)))
+    method_order = [method for method in METHOD_ORDER if method in found]
+    method_order += [method for method in found if method not in method_order]
+    runs["method"] = pd.Categorical(runs["method"], method_order, ordered=True)
     if not quiet:
         status = runs.groupby("run_name")["stage"].max()
         print(f"{len(status)} runs found")
@@ -165,10 +171,10 @@ def summary_table(runs, score="accuracy"):
 
 
 def resolve_borrowed_run(folder, recorded_path):
-    """Resolve an absolute Colab run path after the same Drive is mounted elsewhere.
+    """Resolve a recorded source path after an artifact directory is moved.
 
     The recorded path is tried first. If it does not exist, the source run's basename is
-    resolved as a sibling of the current run, which works for local Drive mirrors.
+    resolved as a sibling of the current run.
     """
     if not recorded_path:
         return None

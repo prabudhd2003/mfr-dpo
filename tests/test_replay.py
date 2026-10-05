@@ -185,3 +185,11 @@ def test_unknown_method_raises():
         raise AssertionError("expected ValueError")
     except ValueError:
         pass
+
+
+def test_only_margin_based_methods_need_live_refreshes():
+    assert mfr_replay.needs_refresh("mfr")
+    assert mfr_replay.needs_refresh("lowest_margin")
+    assert not mfr_replay.needs_refresh("random")
+    assert not mfr_replay.needs_refresh("random_high")
+    assert not mfr_replay.needs_refresh("none")

@@ -59,8 +59,9 @@ The authoritative settings are in `configs/experiment_protocol.json`.
 |---|---|
 | Model | `Qwen/Qwen2.5-1.5B-Instruct`, pinned revision |
 | Training | One QLoRA adapter, sequential DPO, one epoch per behavior |
-| Hardware | NVIDIA A100 through Google Colab |
-| Orders | Helpful -> Safe -> Quality; Safe -> Helpful -> Quality |
+| Hardware | One fixed NVIDIA A100 type on USC CARC |
+| Main orders | Helpful -> Safe -> Quality; Safe -> Helpful -> Quality |
+| Quality-retention extension | Quality -> Helpful -> Safe; Quality -> Safe -> Helpful |
 | Seeds | 0 and 1 |
 | DPO beta | 0.1 |
 | Learning rate | `1e-4` |
@@ -122,7 +123,7 @@ model revision, and update budget. Report individual cells and paired-bootstrap 
 ## Limitations
 
 - The study uses one 1.5B model and two seeds.
-- Quality is last in both orders, so its retention is never measured.
+- Quality retention is not measured in the main two orders; the optional Quality-first extension measures it.
 - Preference accuracy does not establish generated helpfulness, safety, or quality.
 - Dataset labels may be noisy, and source responses may contain factual errors.
 - MFR can allocate more replay to one old behavior. Without a forced-equal-allocation control, pair selection cannot be

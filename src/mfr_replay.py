@@ -24,7 +24,15 @@ import pandas as pd
 from mfr_utils import buffer_seed
 
 METHODS = ("none", "random", "random_high", "lowest_margin", "mfr")
+REFRESH_METHODS = ("lowest_margin", "mfr")
 EXTRA_COLUMNS = ["dataset", "peak_margin", "current_margin"]
+
+
+def needs_refresh(method):
+    """Whether a selection rule needs current margins rescored during a stage."""
+    if method not in METHODS:
+        raise ValueError(f"unknown replay method {method!r}; expected one of {METHODS}")
+    return method in REFRESH_METHODS
 
 
 class ReplayBuffer:

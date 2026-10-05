@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import random
+import socket
 import subprocess
 import tempfile
 
@@ -168,6 +169,8 @@ def run_info(repo_dir="."):
         "git_dirty": _git_dirty(repo_dir),
         "scientific_code_sha256": scientific_code_sha256(repo_dir),
         "gpu": _gpu_name(),
+        "hostname": socket.gethostname(),
+        "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
         "packages": _versions(),
         "deterministic_gpu_kernels": False,
     }

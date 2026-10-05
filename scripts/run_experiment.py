@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 import mfr_cache
 import mfr_data
 import mfr_dpo
-from mfr_replay import ReplayBuffer
+from mfr_replay import METHODS as IMPLEMENTED_METHODS, ReplayBuffer
 from mfr_utils import (file_sha256, load_protocol, mark_run_complete, method_old_per_step,
                        run_info, save_json_atomic, seed_everything, stage_seed,
                        validate_resume_settings, validate_stage1_source)
@@ -22,20 +22,21 @@ from mfr_utils import (file_sha256, load_protocol, mark_run_complete, method_old
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--drive-dir", required=True, help="Shared mfr-dpo folder containing runs/")
-    parser.add_argument("--order", type=int, choices=(1, 2), required=True)
     parser.add_argument(
-        "--method", choices=("none", "random", "random_high", "lowest_margin", "mfr"), required=True
+        "--output-dir", required=True,
+        help="CARC artifact root; run folders are written below OUTPUT_DIR/runs",
     )
-    parser.add_argument("--seed", type=int, choices=(0, 1), required=True)
-    parser.add_argument("--start-stage", type=int, choices=(1, 2, 3), default=1)
+    parser.add_argument("--order", type=int, required=True)
+    parser.add_argument("--method", required=True)
+    parser.add_argument("--seed", type=int, required=True)
+    parser.add_argument("--start-stage", type=int, default=1)
     parser.add_argument("--stage1-from", help="Compatible completed run directory whose stage 1 should be reused")
     parser.add_argument("--reference-cache", help="Optional CSV made by build_reference_cache.py")
     return parser.parse_args()
 
 
 def resolve_source_run(recorded, run_dir):
-    """Use the recorded source path or the equivalent sibling under this Drive mount."""
+    """Use the recorded source path or the equivalent sibling under this artifact root."""
     source = Path(recorded)
     if source.exists():
         return source
@@ -81,15 +82,36 @@ def update_buffer(model, tokenizer, buffer, stage, dataset, train_df, stage_dir,
 def main():
     args = parse_args()
     protocol = load_protocol(ROOT / "configs" / "experiment_protocol.json")
-    order = protocol["orders"][str(args.order)]
+    order_key = str(args.order)
+    if order_key not in protocol["orders"]:
+        choices = ", ".join(sorted(protocol["orders"], key=int))
+        raise ValueError(f"order {args.order} is not in the protocol; choose one of {choices}")
+    configured_methods = protocol.get("methods", []) + protocol.get("secondary_methods", [])
+    if args.method not in configured_methods:
+        raise ValueError(
+            f"method {args.method!r} is not in the protocol; choose one of {configured_methods}"
+        )
+    if args.method not in IMPLEMENTED_METHODS:
+        raise ValueError(
+            f"method {args.method!r} is configured but not implemented in src/mfr_replay.py"
+        )
+    if args.seed not in protocol.get("seeds", []):
+        raise ValueError(
+            f"seed {args.seed} is not in the protocol; choose one of {protocol.get('seeds', [])}"
+        )
+    order = protocol["orders"][order_key]
+    n_stages = len(order)
+    if not 1 <= args.start_stage <= n_stages:
+        raise ValueError(f"start stage must be between 1 and {n_stages}")
     old_per_step = method_old_per_step(protocol, args.method)
-    run_name = f"v2_o{args.order}_{args.method}_s{args.seed}"
+    run_name = f"{protocol['data_version']}_o{args.order}_{args.method}_s{args.seed}"
     print(
         f"Starting {run_name}: order={' -> '.join(order)}, "
         f"batch={protocol['new_per_step']} new + {old_per_step if args.method != 'none' else 0} replay",
         flush=True,
     )
-    run_dir = Path(args.drive_dir) / "runs" / run_name
+    artifact_root = Path(args.output_dir).expanduser().resolve()
+    run_dir = artifact_root / "runs" / run_name
     data_dir = ROOT / protocol["data_dir"]
     manifest_path = data_dir / "manifest.json"
     if not manifest_path.exists():
@@ -201,9 +223,9 @@ def main():
     if first_stage == 1:
         results = score_sets(model, tokenizer, splits, 0, "base", run_meta, run_dir, protocol, reference_cache)
 
-    for stage in range(first_stage, 4):
+    for stage in range(first_stage, n_stages + 1):
         dataset = order[stage - 1]
-        print(f"\nStage {stage}/3: training on {dataset}", flush=True)
+        print(f"\nStage {stage}/{n_stages}: training on {dataset}", flush=True)
         stage_dir = run_dir / f"stage{stage}_{dataset}"
         stage_dir.mkdir(parents=True, exist_ok=True)
         history, replay_log = mfr_dpo.train_stage_replay(
@@ -217,7 +239,7 @@ def main():
             reference_cache=reference_cache,
         )
         model.save_pretrained(stage_dir)
-        print(f"Stage {stage}/3 training saved; scoring validation sets...", flush=True)
+        print(f"Stage {stage}/{n_stages} training saved; scoring validation sets...", flush=True)
         history.to_csv(stage_dir / "history.csv", index=False)
         replay_log.to_csv(stage_dir / "replay_log.csv", index=False)
         stage_results = score_sets(

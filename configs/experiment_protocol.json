@@ -1,12 +1,14 @@
 {
-  "protocol_version": "2.0",
+  "protocol_version": "2.1",
   "data_version": "v2",
   "data_dir": "data/v2",
   "model_name": "Qwen/Qwen2.5-1.5B-Instruct",
   "model_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
   "orders": {
     "1": ["helpful", "safe", "quality"],
-    "2": ["safe", "helpful", "quality"]
+    "2": ["safe", "helpful", "quality"],
+    "3": ["quality", "helpful", "safe"],
+    "4": ["quality", "safe", "helpful"]
   },
   "methods": ["none", "random", "mfr"],
   "secondary_methods": ["random_high", "lowest_margin"],

@@ -13,11 +13,12 @@ substantially reducing new learning.
 
 ## Current status
 
-The data, training pipeline, replay methods, logging, reference cache, automated checks, and validation analysis are
-implemented. One of four order-and-seed comparison groups is complete: **Order 1, Seed 0**, which trains
-Helpful -> Safe -> Quality.
+The data, training pipeline, five replay conditions, logging, reference cache, automated checks, and validation
+analysis are implemented. The earlier Colab study is preserved under `notebooks/colab/`. Because the final study is
+moving to USC CARC, its experiment grid will be rerun there on one consistent A100 type. Colab measurements remain
+useful as preliminary evidence but will not be mixed into the final CARC tables.
 
-### Forgetting is present
+### Preliminary Colab evidence
 
 In the corrected no-replay run:
 
@@ -51,11 +52,16 @@ interval crosses or touches zero. No conclusive MFR claim should be made yet.
 | Safe | PKU-SafeRLHF | 2,000 | 200 | 300 |
 | Quality | UltraFeedback Binarized | 2,000 | 200 | 300 |
 
-The experiment uses two orders and two seeds:
+The main experiment uses two orders and two seeds:
 
 - **Order 1:** Helpful -> Safe -> Quality
 - **Order 2:** Safe -> Helpful -> Quality
 - **Seeds:** 0 and 1
+
+Two additional Quality-first orders are configured for a retention extension:
+
+- **Order 3:** Quality -> Helpful -> Safe
+- **Order 4:** Quality -> Safe -> Helpful
 
 The core methods are no replay, Random 10%, and MFR 10%. Random 14.3% tests whether more random replay is enough,
 and Lowest margin is a simpler targeted-replay baseline.
@@ -65,13 +71,14 @@ in [`docs/PROJECT_GUIDE.md`](docs/PROJECT_GUIDE.md).
 
 ## What remains
 
-1. Run all five methods for Order 1/Seed 1, Order 2/Seed 0, and Order 2/Seed 1.
-2. Rerun Notebook 07 across the complete grid and add the required `accuracy_sum` secondary analysis.
-3. Run Notebook 08 for example-level error and forgetting analysis.
-4. Freeze the analysis and model-selection decision.
-5. Run Notebook 09 once on the locked test sets.
-6. Run generation, automatic behavior evaluation, and blinded human review with Notebooks 10 and 11.
-7. Complete the report and presentation.
+1. Build the reference cache once on CARC.
+2. Rerun all five methods for Orders 1 and 2, Seeds 0 and 1, on one A100 type.
+3. Run the core methods for the Quality-first extension if the compute budget permits.
+4. Rerun Notebook 07 across the complete CARC grid and add the required `accuracy_sum` secondary analysis.
+5. Run example-level error and forgetting analysis.
+6. Freeze the analysis and model-selection decision.
+7. Run the locked test once, followed by generation, automatic evaluation, and blinded human review.
+8. Complete the report and presentation.
 
 Do not inspect the locked test outcomes before the validation analysis and model-selection decision are frozen.
 
@@ -82,7 +89,7 @@ mfr-dpo/
 ├── configs/       # Frozen experiment settings
 ├── data/v2/       # Active versioned data and manifest
 ├── docs/          # One project guide and one runbook
-├── notebooks/     # Numbered workflow from data preparation to final review
+├── notebooks/     # Active CARC notebooks; historical Colab notebooks are under notebooks/colab
 ├── pilot/         # Archived proof-of-concept code; not used for final results
 ├── scripts/       # Command-line entry points used by notebooks
 ├── src/           # Reusable data, training, replay, analysis, and evaluation code
@@ -93,25 +100,18 @@ The active notebooks are:
 
 | Notebook | Purpose |
 |---|---|
-| `01_load_data.ipynb` | Build the validated v2 data. |
-| `02_data_review.ipynb` | Review counts, leakage checks, lengths, and examples. |
-| `03_train_one_stage.ipynb` | Optional one-stage sanity check. |
-| `04_pilot.ipynb` | Optional v2 forgetting demonstration. |
-| `05_build_reference_cache.ipynb` | Build the frozen-reference cache. |
-| `06_run_experiment.ipynb` | Run or resume one experiment. |
+| `01_carc_status.ipynb` | Verify the frozen data, CARC cache, and run completion. |
 | `07_compare_runs.ipynb` | Compare validation results, uncertainty, replay, and cost. |
-| `08_error_analysis.ipynb` | Analyze which examples were forgotten. |
-| `09_final_test_eval.ipynb` | Run the one-time locked test. |
-| `10_generation_eval.ipynb` | Generate responses for behavioral evaluation. |
-| `11_blind_review.ipynb` | Create and score blinded human review. |
+
+The previous numbered Colab workflow, including the unchanged Notebook 06 and all saved outputs, is preserved under
+`notebooks/colab/`.
 
 ## Running the project
 
-Training is designed for Google Colab with an NVIDIA A100 GPU. Large models, caches, generations, and run folders are
-stored in the shared [Google Drive folder](https://drive.google.com/drive/folders/1Mk7RtTdu0m_f7wnuvzGNzgRSTr8T1bqb?usp=drive_link),
-not in Git.
+Training is designed for USC CARC Slurm with one NVIDIA A100 GPU. Large caches, checkpoints, logs, generations, and
+run folders are stored in a user-selected CARC project directory, not in Git.
 
-Clone the [GitHub repository](https://github.com/prabudhd2003/mfr-dpo), then follow
+Clone the [GitHub repository](https://github.com/prabudhd2003/mfr-dpo), switch to the `carc` branch, then follow
 [`docs/RUNBOOK.md`](docs/RUNBOOK.md). All scientific settings come from `configs/experiment_protocol.json`.
 
 For local checks:

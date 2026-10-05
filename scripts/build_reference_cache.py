@@ -17,7 +17,7 @@ from mfr_utils import file_sha256, load_protocol, seed_everything
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output", required=True, help="CSV path, preferably in the shared Drive")
+    parser.add_argument("--output", required=True, help="CSV path in the persistent CARC artifact directory")
     parser.add_argument("--batch-size", type=int, default=4)
     args = parser.parse_args()
     protocol = load_protocol(ROOT / "configs" / "experiment_protocol.json")

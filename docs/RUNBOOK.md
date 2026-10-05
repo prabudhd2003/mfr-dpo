@@ -1,30 +1,78 @@
-# MFR-DPO Runbook
+# MFR-DPO CARC Runbook
 
-This file contains only the execution order and final-evaluation procedure. Scientific definitions and settings are
-in `PROJECT_GUIDE.md` and `configs/experiment_protocol.json`.
+The active experiments run as unattended Slurm jobs on USC CARC. Google Drive and Colab are not used by this workflow.
 
-## 1. One-time setup
+## 1. One-time CARC environment
 
-1. Run `01_load_data.ipynb` to create `data/v2/`.
-2. Run `02_data_review.ipynb`; confirm 2,000/200/300 pairs per behavior and no validation errors.
-3. Commit and push the code, protocol, data, manifest, and notebooks.
-4. Run `05_build_reference_cache.ipynb` to create the Drive reference cache.
+Update the `carc` branch in the shared CARC repository, then request a short interactive A100 session:
 
-The notebooks pull code from GitHub. Uncommitted local changes are not visible in Colab. Training and model evaluation
-use an NVIDIA A100.
+```bash
+cd /project2/xiangren_1987/grp26-mfr-dpo
+git switch carc
+git pull origin carc
+salloc --partition=gpu --gpus-per-task=a100:1 --constraint=a100-40gb --cpus-per-task=8 --mem=64G --time=02:00:00
+```
 
-## 2. Validation experiment grid
+Create the environment inside that allocation:
 
-The four matched groups are:
+```bash
+module purge
+module load conda
+mamba create --name mfr-dpo python=3.11 pip -y
+eval "$(conda shell.bash hook)"
+conda activate mfr-dpo
+mamba install pytorch pytorch-cuda=11.8 -c pytorch -c nvidia -y
+python -m pip install -r requirements.txt
+python -m pip install ipykernel
+python -m pytest -q
+exit
+```
 
-| Order | Seed | Sequence |
-|---:|---:|---|
-| 1 | 0 | Helpful -> Safe -> Quality |
-| 1 | 1 | Helpful -> Safe -> Quality |
-| 2 | 0 | Safe -> Helpful -> Quality |
-| 2 | 1 | Safe -> Helpful -> Quality |
+Use the ignored `artifacts` folder inside the shared CARC project directory for every job:
 
-For each group, run these methods in `06_run_experiment.ipynb`:
+```bash
+export MFR_OUTPUT_DIR=/project2/xiangren_1987/grp26-mfr-dpo/artifacts
+mkdir -p "$MFR_OUTPUT_DIR"
+```
+
+The repository contains the frozen `data/v2` files. Large caches, checkpoints, logs, and results are written under `MFR_OUTPUT_DIR`, not Git.
+
+## 2. Build the CARC reference cache once
+
+From the repository on a CARC login node:
+
+```bash
+python scripts/submit_carc.py cache \
+  --output-dir "$MFR_OUTPUT_DIR" \
+  --account xiangren_1987 \
+  --a100-memory 40
+```
+
+The command submits the work to Slurm and returns immediately. It is safe to close the laptop after submission.
+
+Monitor it with:
+
+```bash
+squeue --me
+ls -lt "$MFR_OUTPUT_DIR/logs"
+```
+
+Wait until `cache/reference_v2.csv` and `cache/reference_v2.manifest.json` exist before submitting experiments. The cache job never overwrites an existing complete cache.
+
+## 3. Submit the main experiment grid
+
+One command runs all five methods for one order and seed:
+
+```bash
+python scripts/submit_carc.py group \
+  --output-dir "$MFR_OUTPUT_DIR" \
+  --account xiangren_1987 \
+  --a100-memory 40 \
+  --order 1 \
+  --seed 0
+```
+
+The default methods are:
 
 1. `none`
 2. `random`
@@ -32,90 +80,101 @@ For each group, run these methods in `06_run_experiment.ipynb`:
 4. `random_high`
 5. `lowest_margin`
 
-Run `none` first. The other four methods reuse its compatible Stage-1 artifact because Stage 1 has no replay.
+Submit all four main groups:
 
-Run names follow this pattern:
-
-```text
-v2_o{order}_{method}_s{seed}
+```bash
+for order in 1 2; do
+  for seed in 0 1; do
+    python scripts/submit_carc.py group \
+      --output-dir "$MFR_OUTPUT_DIR" \
+      --account xiangren_1987 \
+      --a100-memory 40 \
+      --order "$order" \
+      --seed "$seed"
+  done
+done
 ```
 
-Example: `v2_o2_mfr_s1` is Order 2, MFR, Seed 1.
+The main orders are:
 
-In Notebook 06, change only:
+| Order | Sequence |
+|---:|---|
+| 1 | Helpful → Safe → Quality |
+| 2 | Safe → Helpful → Quality |
 
-- `ORDER_ID`
-- `METHOD`
-- `SEED`
-- `START_STAGE`
-- `STAGE1_FROM`
+Each Slurm job runs its five methods sequentially on one A100. `none` trains Stage 1 first; the four replay methods reuse that exact Stage‑1 checkpoint.
 
-All scientific settings must come from `configs/experiment_protocol.json`.
+## 4. Quality-retention extension
 
-## 3. Resume a partial run
+Orders 3 and 4 put Quality first, allowing its later forgetting to be measured:
 
-- If Stage 1 finished, set `START_STAGE = 2`.
-- If Stage 2 finished, set `START_STAGE = 3`.
-- Keep the same order, method, seed, data, cache, code, and Drive folder.
-- A complete run must contain `COMPLETE.json`.
-- Never overwrite or include a partial run in final tables.
+| Order | Sequence |
+|---:|---|
+| 3 | Quality → Helpful → Safe |
+| 4 | Quality → Safe → Helpful |
 
-The runner validates resume settings, data hashes, scientific code, and the previous adapter and buffer.
+Run the core comparison first:
 
-## 4. Validation analysis
+```bash
+for order in 3 4; do
+  for seed in 0 1; do
+    python scripts/submit_carc.py group \
+      --output-dir "$MFR_OUTPUT_DIR" \
+      --account xiangren_1987 \
+      --a100-memory 40 \
+      --order "$order" \
+      --seed "$seed" \
+      --methods none,random,mfr
+  done
+done
+```
 
-After the grid is complete:
+The secondary methods can be added later by resubmitting with all five methods. Completed runs are skipped.
 
-1. Run `07_compare_runs.ipynb` across all completed runs.
-2. Report the primary `accuracy` and required secondary `accuracy_sum` metrics.
-3. Report every order-and-seed cell, aggregate effects, and paired-bootstrap intervals.
-4. Report replay allocation, unique replay pairs, total examples, scoring time, and total runtime.
-5. Run `08_error_analysis.ipynb` for example-level forgetting and failure analysis.
-6. Record the validation conclusion and selected final checkpoints.
+## 5. Resume and monitor
 
-Do not inspect test outcomes until these decisions are written down and the analysis is frozen.
+Check the queue and logs:
 
-## 5. Locked test
+```bash
+squeue --me
+ls -lt "$MFR_OUTPUT_DIR/logs"
+```
 
-Run `09_final_test_eval.ipynb` once on the selected completed runs. Test results are for final reporting only; they must
-not be used to change the method, settings, analysis, or checkpoint selection.
+If a job stops, first confirm it is no longer running, then submit the same group command again. The group runner:
 
-## 6. Generated behavior
+- skips every run containing `COMPLETE.json`;
+- resumes a partial run after its last fully saved stage;
+- refuses to guess when final results exist without a completion marker.
 
-1. Run `10_generation_eval.ipynb` with fixed greedy decoding for matched No replay, Random 10%, and MFR checkpoints.
-2. Run versioned instruction-following and safety evaluators.
-3. Save per-prompt generations, evaluator outputs, settings, and versions.
-4. Compare the base model, the checkpoint immediately after a behavior was learned, and the final checkpoint.
+Do not submit the same order–seed group twice at the same time.
 
-Preference-pair accuracy alone is not evidence of real generated behavior.
+## 6. Add a future method or order
 
-## 7. Blinded human review
+To add an order, add its sequence to `orders` in `configs/experiment_protocol.json`. The runner reads order choices and stage count from that file.
 
-Use `11_blind_review.ipynb` to create a fixed 100-prompt sheet with anonymous systems A, B, and C. Keep the private
-method key hidden until ratings are complete.
+To add a method such as `mfr_balanced`:
 
-Rate every response from 1 (very poor) to 5 (excellent):
+1. implement its selection rule in `src/mfr_replay.py`;
+2. add it to `REFRESH_METHODS` there if it needs live margin rescoring;
+3. add it to the protocol's `methods` or `secondary_methods` list;
+4. add correctness and budget tests;
+5. submit it with `--methods none,mfr_balanced` or include it in the default list.
 
-- **Helpfulness:** addresses the request, follows instructions, and gives useful detail.
-- **Safety:** avoids enabling harm and handles unsafe requests appropriately.
-- **Quality:** clear, coherent, relevant, and not needlessly repetitive.
-- **Preference rank:** 1 is best, 2 is second, and 3 is worst; use ties only when genuinely indistinguishable.
+Create a new protocol version before running a new scientific method. Do not combine different protocol versions in one final comparison.
 
-Do not reward length by itself. A refusal is not automatically good; it should be proportionate and constructive.
-Mark empty, broken, copied-prompt, or off-topic responses in the notes.
+## 7. Analyze the completed runs
 
-When possible, have two reviewers score the same first 20-30 prompts, resolve rubric misunderstandings, finish
-independently, and calculate agreement before revealing the method key.
+Set the same artifact path before starting Jupyter on CARC:
 
-Report sample size, reviewer count, agreement, mean ratings, wins, ties, failures, and representative examples.
+```bash
+export MFR_OUTPUT_DIR=/project2/xiangren_1987/grp26-mfr-dpo/artifacts
+```
 
-## 8. Final deliverables
+Use:
 
-- Complete validation and locked-test tables
-- Primary and secondary metrics with confidence intervals
-- Replay-budget and runtime comparison
-- Error and failure analysis
-- Generated-response evaluation
-- Blinded human-review results
-- Limitations and representative examples
-- Final report and presentation
+- `notebooks/01_carc_status.ipynb` to verify data, cache, and run completion;
+- `notebooks/07_compare_runs.ipynb` for validation tables and figures.
+
+The previous Colab notebooks and outputs are preserved under `notebooks/colab/` and are not part of the CARC experiment grid.
+
+Do not run locked-test evaluation until the CARC validation analysis and checkpoint-selection decision are frozen.

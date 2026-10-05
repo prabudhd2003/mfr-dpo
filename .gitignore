@@ -8,8 +8,8 @@ tmp/
 cache/
 outputs/
 runs/
+artifacts/
 *.safetensors
 *.pt
 *.pth
 .env
-

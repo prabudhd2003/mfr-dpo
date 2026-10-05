@@ -12,6 +12,8 @@ def test_protocol_uses_exact_ten_percent_replay():
     assert protocol["new_per_step"] == 18 and protocol["old_per_step"] == 2
     assert protocol["methods"] == ["none", "random", "mfr"]
     assert "random_high" in protocol["secondary_methods"]
+    assert protocol["orders"]["3"] == ["quality", "helpful", "safe"]
+    assert protocol["orders"]["4"] == ["quality", "safe", "helpful"]
     assert method_old_per_step(protocol, "random") == 2
     assert method_old_per_step(protocol, "random_high") == 3
     assert protocol["lora_alpha"] == 32 and protocol["epochs"] == 1

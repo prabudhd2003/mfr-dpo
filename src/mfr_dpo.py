@@ -272,7 +272,7 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
     for step in bar:
         interval = step // interval_len
         if replaying and step % interval_len == 0:
-            if step > 0 and method in ("mfr", "lowest_margin"):
+            if step > 0 and mfr_replay.needs_refresh(method):
                 refresh_started = time.time()
                 scores = score_pairs(
                     model, tokenizer, buffer.rows(), beta=beta, batch_size=score_batch_size,
