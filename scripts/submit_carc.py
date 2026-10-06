@@ -32,10 +32,10 @@ def parse_args():
     subparsers = parser.add_subparsers(dest="action", required=True)
 
     cache = subparsers.add_parser("cache", help="Build the reference cache once")
-    add_common(cache, "12:00:00")
+    add_common(cache, "02:00:00")
 
     group = subparsers.add_parser("group", help="Run all requested methods for one order and seed")
-    add_common(group, "24:00:00")
+    add_common(group, "04:00:00")
     group.add_argument("--order", type=int, required=True)
     group.add_argument("--seed", type=int, required=True)
     group.add_argument(
@@ -109,8 +109,7 @@ def main():
         return
     if shutil.which("sbatch") is None:
         raise RuntimeError("sbatch was not found; run this command on a USC CARC login node")
-    result = subprocess.run(command, check=True, text=True, capture_output=True)
-    print(result.stdout.strip())
+    subprocess.run(command, check=True, text=True)
     print(f"Log pattern: {log_dir}/{job_name}_<job-id>.out")
 
 

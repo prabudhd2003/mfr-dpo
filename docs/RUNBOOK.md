@@ -24,7 +24,9 @@ mkdir -p "$MFR_CONDA_ROOT/envs" "$CONDA_PKGS_DIRS"
 mamba create --prefix "$MFR_CONDA_ROOT/envs/mfr-dpo" python=3.11 pip -y
 eval "$(conda shell.bash hook)"
 conda activate "$MFR_CONDA_ROOT/envs/mfr-dpo"
-mamba install --prefix "$MFR_CONDA_ROOT/envs/mfr-dpo" pytorch pytorch-cuda=11.8 -c pytorch -c nvidia -c defaults -y
+mamba install --prefix "$MFR_CONDA_ROOT/envs/mfr-dpo" \
+  pytorch pytorch-cuda=11.8 "mkl<2024.1" "intel-openmp<2024.1" \
+  -c pytorch -c nvidia -c defaults -y
 python -m pip install -r requirements.txt
 python -m pip install ipykernel
 python -m pytest -q
@@ -47,7 +49,7 @@ From the repository on a CARC login node:
 ```bash
 python scripts/submit_carc.py cache \
   --output-dir "$MFR_OUTPUT_DIR" \
-  --account xiangren_1987 \
+  --account yzhao010_1531 \
   --a100-memory 40
 ```
 
@@ -69,7 +71,7 @@ One command runs all five methods for one order and seed:
 ```bash
 python scripts/submit_carc.py group \
   --output-dir "$MFR_OUTPUT_DIR" \
-  --account xiangren_1987 \
+  --account yzhao010_1531 \
   --a100-memory 40 \
   --order 1 \
   --seed 0
@@ -90,7 +92,7 @@ for order in 1 2; do
   for seed in 0 1; do
     python scripts/submit_carc.py group \
       --output-dir "$MFR_OUTPUT_DIR" \
-      --account xiangren_1987 \
+      --account yzhao010_1531 \
       --a100-memory 40 \
       --order "$order" \
       --seed "$seed"
@@ -123,7 +125,7 @@ for order in 3 4; do
   for seed in 0 1; do
     python scripts/submit_carc.py group \
       --output-dir "$MFR_OUTPUT_DIR" \
-      --account xiangren_1987 \
+      --account yzhao010_1531 \
       --a100-memory 40 \
       --order "$order" \
       --seed "$seed" \
