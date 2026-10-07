@@ -13,6 +13,13 @@ module load conda
 eval "$(conda shell.bash hook)"
 conda activate "$CONDA_ENV"
 
+PYTHON_BIN="$CONDA_ENV/bin/python"
+if [[ ! -x "$PYTHON_BIN" ]]; then
+  echo "Python executable not found in Conda environment: $PYTHON_BIN" >&2
+  exit 1
+fi
+echo "Python: $PYTHON_BIN"
+
 mkdir -p "$OUTPUT_DIR/cache" "$OUTPUT_DIR/logs" "$OUTPUT_DIR/runs" "$OUTPUT_DIR/huggingface"
 export HF_HOME="$OUTPUT_DIR/huggingface"
 export TOKENIZERS_PARALLELISM=false
@@ -20,7 +27,7 @@ export PYTHONUNBUFFERED=1
 
 cd "$REPO_DIR"
 
-python - "$EXPECTED_GPU" <<'PY'
+"$PYTHON_BIN" - "$EXPECTED_GPU" <<'PY'
 import sys
 import torch
 if not torch.cuda.is_available():
@@ -40,14 +47,14 @@ case "$ACTION" in
     if [[ -s "$CACHE_PATH" && -s "${CACHE_PATH%.csv}.manifest.json" ]]; then
       echo "Reference cache already exists; leaving it unchanged: $CACHE_PATH"
     else
-      python -u scripts/build_reference_cache.py --output "$CACHE_PATH" --batch-size 4
+      "$PYTHON_BIN" -u scripts/build_reference_cache.py --output "$CACHE_PATH" --batch-size 4
     fi
     ;;
   group)
     ORDER="$1"
     SEED="$2"
     METHODS="$3"
-    python -u scripts/run_experiment_group.py \
+    "$PYTHON_BIN" -u scripts/run_experiment_group.py \
       --output-dir "$OUTPUT_DIR" \
       --order "$ORDER" \
       --seed "$SEED" \
