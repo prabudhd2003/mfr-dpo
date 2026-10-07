@@ -49,7 +49,7 @@ From the repository on a CARC login node:
 ```bash
 python scripts/submit_carc.py cache \
   --output-dir "$MFR_OUTPUT_DIR" \
-  --account yzhao010_1531 \
+  --account xiangren_1987 \
   --gpu l40s
 ```
 
@@ -71,7 +71,7 @@ One command runs all five methods for one order and seed:
 ```bash
 python scripts/submit_carc.py group \
   --output-dir "$MFR_OUTPUT_DIR" \
-  --account yzhao010_1531 \
+  --account xiangren_1987 \
   --gpu l40s \
   --order 1 \
   --seed 0
@@ -92,7 +92,7 @@ for order in 1 2; do
   for seed in 0 1; do
     python scripts/submit_carc.py group \
       --output-dir "$MFR_OUTPUT_DIR" \
-      --account yzhao010_1531 \
+      --account xiangren_1987 \
       --gpu l40s \
       --order "$order" \
       --seed "$seed"
@@ -125,7 +125,7 @@ for order in 3 4; do
   for seed in 0 1; do
     python scripts/submit_carc.py group \
       --output-dir "$MFR_OUTPUT_DIR" \
-      --account yzhao010_1531 \
+      --account xiangren_1987 \
       --gpu l40s \
       --order "$order" \
       --seed "$seed" \
