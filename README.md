@@ -15,7 +15,7 @@ substantially reducing new learning.
 
 The data, training pipeline, five replay conditions, logging, reference cache, automated checks, and validation
 analysis are implemented. The earlier Colab study is preserved under `notebooks/colab/`. Because the final study is
-moving to USC CARC, its experiment grid will be rerun there on one consistent A100 type. Colab measurements remain
+moving to USC CARC, its experiment grid will be rerun there on NVIDIA L40S GPUs. Colab measurements remain
 useful as preliminary evidence but will not be mixed into the final CARC tables.
 
 ### Preliminary Colab evidence
@@ -72,7 +72,7 @@ in [`docs/PROJECT_GUIDE.md`](docs/PROJECT_GUIDE.md).
 ## What remains
 
 1. Build the reference cache once on CARC.
-2. Rerun all five methods for Orders 1 and 2, Seeds 0 and 1, on one A100 type.
+2. Rerun all five methods for Orders 1 and 2, Seeds 0 and 1, on L40S GPUs.
 3. Run the core methods for the Quality-first extension if the compute budget permits.
 4. Rerun Notebook 07 across the complete CARC grid and add the required `accuracy_sum` secondary analysis.
 5. Run example-level error and forgetting analysis.
@@ -108,7 +108,7 @@ The previous numbered Colab workflow, including the unchanged Notebook 06 and al
 
 ## Running the project
 
-Training is designed for USC CARC Slurm with one NVIDIA A100 GPU. Large caches, checkpoints, logs, generations, and
+Training is designed for USC CARC Slurm with one NVIDIA L40S GPU. Large caches, checkpoints, logs, generations, and
 run folders are stored in a user-selected CARC project directory, not in Git.
 
 Clone the [GitHub repository](https://github.com/prabudhd2003/mfr-dpo), switch to the `carc` branch, then follow

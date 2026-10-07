@@ -5,7 +5,8 @@ ACTION="$1"
 REPO_DIR="$2"
 OUTPUT_DIR="$3"
 CONDA_ENV="$4"
-shift 4
+EXPECTED_GPU="$5"
+shift 5
 
 module purge
 module load conda
@@ -19,13 +20,15 @@ export PYTHONUNBUFFERED=1
 
 cd "$REPO_DIR"
 
-python - <<'PY'
+python - "$EXPECTED_GPU" <<'PY'
+import sys
 import torch
 if not torch.cuda.is_available():
     raise RuntimeError("Slurm job started without a visible CUDA GPU")
 name = torch.cuda.get_device_name(0)
-if "A100" not in name:
-    raise RuntimeError(f"Expected an A100 GPU, received {name}")
+expected = sys.argv[1].upper()
+if expected not in name.upper():
+    raise RuntimeError(f"Expected a {expected} GPU, received {name}")
 print(f"GPU: {name}", flush=True)
 print(f"PyTorch: {torch.__version__}; CUDA runtime: {torch.version.cuda}", flush=True)
 PY

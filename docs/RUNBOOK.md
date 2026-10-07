@@ -50,7 +50,7 @@ From the repository on a CARC login node:
 python scripts/submit_carc.py cache \
   --output-dir "$MFR_OUTPUT_DIR" \
   --account yzhao010_1531 \
-  --a100-memory 40
+  --gpu l40s
 ```
 
 The command submits the work to Slurm and returns immediately. It is safe to close the laptop after submission.
@@ -72,7 +72,7 @@ One command runs all five methods for one order and seed:
 python scripts/submit_carc.py group \
   --output-dir "$MFR_OUTPUT_DIR" \
   --account yzhao010_1531 \
-  --a100-memory 40 \
+  --gpu l40s \
   --order 1 \
   --seed 0
 ```
@@ -93,7 +93,7 @@ for order in 1 2; do
     python scripts/submit_carc.py group \
       --output-dir "$MFR_OUTPUT_DIR" \
       --account yzhao010_1531 \
-      --a100-memory 40 \
+      --gpu l40s \
       --order "$order" \
       --seed "$seed"
   done
@@ -107,7 +107,7 @@ The main orders are:
 | 1 | Helpful → Safe → Quality |
 | 2 | Safe → Helpful → Quality |
 
-Each Slurm job runs its five methods sequentially on one A100. `none` trains Stage 1 first; the four replay methods reuse that exact Stage‑1 checkpoint.
+Each Slurm job runs its five methods sequentially on one L40S. `none` trains Stage 1 first; the four replay methods reuse that exact Stage‑1 checkpoint.
 
 ## 4. Quality-retention extension
 
@@ -126,7 +126,7 @@ for order in 3 4; do
     python scripts/submit_carc.py group \
       --output-dir "$MFR_OUTPUT_DIR" \
       --account yzhao010_1531 \
-      --a100-memory 40 \
+      --gpu l40s \
       --order "$order" \
       --seed "$seed" \
       --methods none,random,mfr

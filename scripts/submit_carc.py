@@ -13,6 +13,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKER = ROOT / "scripts" / "carc_job.sh"
+GPU_CHOICES = {
+    "l40s": ("l40s", None),
+    "a100-any": ("a100", None),
+    "a100-40gb": ("a100", "a100-40gb"),
+    "a100-80gb": ("a100", "a100-80gb"),
+}
 
 
 def add_common(parser, default_time):
@@ -22,7 +28,10 @@ def add_common(parser, default_time):
         "--conda-env", default=str(ROOT / ".conda" / "envs" / "mfr-dpo"),
         help="Conda environment name or absolute prefix",
     )
-    parser.add_argument("--a100-memory", choices=("40", "80", "any"), default="40")
+    parser.add_argument(
+        "--gpu", choices=tuple(GPU_CHOICES), default="l40s",
+        help="GPU request; L40S is the project default",
+    )
     parser.add_argument("--time", default=default_time, help="Slurm time limit")
     parser.add_argument("--dry-run", action="store_true", help="Print the sbatch command only")
 
@@ -73,17 +82,19 @@ def main():
     log_dir = output_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
+    gpu_type, constraint = GPU_CHOICES[args.gpu]
+
     if args.action == "group":
         methods = validate_group(args, settings)
         method_text = ",".join(methods)
         job_name = f"mfr-o{args.order}-s{args.seed}"
         worker_args = [
-            "group", str(ROOT), str(output_dir), args.conda_env,
+            "group", str(ROOT), str(output_dir), args.conda_env, gpu_type,
             str(args.order), str(args.seed), method_text,
         ]
     else:
         job_name = "mfr-cache"
-        worker_args = ["cache", str(ROOT), str(output_dir), args.conda_env]
+        worker_args = ["cache", str(ROOT), str(output_dir), args.conda_env, gpu_type]
 
     command = [
         "sbatch",
@@ -94,11 +105,11 @@ def main():
         "--cpus-per-task=8",
         "--mem=64G",
         f"--time={args.time}",
-        "--gpus-per-task=a100:1",
+        f"--gpus-per-task={gpu_type}:1",
         f"--output={log_dir}/%x_%j.out",
     ]
-    if args.a100_memory != "any":
-        command.append(f"--constraint=a100-{args.a100_memory}gb")
+    if constraint:
+        command.append(f"--constraint={constraint}")
     if args.account:
         command.append(f"--account={args.account}")
     command.extend([str(WORKER), *worker_args])

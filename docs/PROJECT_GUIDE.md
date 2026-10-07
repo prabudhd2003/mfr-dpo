@@ -59,7 +59,7 @@ The authoritative settings are in `configs/experiment_protocol.json`.
 |---|---|
 | Model | `Qwen/Qwen2.5-1.5B-Instruct`, pinned revision |
 | Training | One QLoRA adapter, sequential DPO, one epoch per behavior |
-| Hardware | One fixed NVIDIA A100 type on USC CARC |
+| Hardware | NVIDIA L40S on USC CARC |
 | Main orders | Helpful -> Safe -> Quality; Safe -> Helpful -> Quality |
 | Quality-retention extension | Quality -> Helpful -> Safe; Quality -> Safe -> Helpful |
 | Seeds | 0 and 1 |
