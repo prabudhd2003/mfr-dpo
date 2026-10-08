@@ -49,7 +49,14 @@ def load_dpo():
         """Pretend nothing changed since the last refresh: return the margins already stored."""
         mfr_dpo.scored.append(len(df))
         margin = df["current_margin"].values if "current_margin" in df else np.zeros(len(df))
-        return pd.DataFrame({"margin": margin, "margin_sum": margin}, index=df["id"].values)
+        if "current_policy_margin" in df:
+            policy = df["current_policy_margin"].fillna(0.1).values
+        else:
+            policy = np.full(len(df), 0.1)
+        return pd.DataFrame({
+            "margin": margin, "margin_sum": margin,
+            "policy_margin": policy, "policy_margin_sum": policy,
+        }, index=df["id"].values)
 
     mfr_dpo.score_pairs = fake_score
     return mfr_dpo
@@ -107,7 +114,7 @@ def test_partial_final_batch_gets_proportional_replay():
 
 
 def test_replay_slots_per_step():
-    for method in ("random", "random_high", "lowest_margin", "mfr"):
+    for method in ("random", "random_high", "lowest_margin", "mfr", "fmcr"):
         history, log = run(method)
         assert (history["n_replay"] == 2).all()                    # exactly 2 old pairs every step
         assert len(log) == 2 * len(history)
@@ -134,6 +141,22 @@ def test_buffer_is_rescored_once_per_interval_except_the_first():
         dpo.scored.clear()
         run(method)
         assert dpo.scored == []                                    # these never re-score
+
+
+def test_fmcr_scores_at_the_first_interval_then_every_refresh():
+    dpo = load_dpo()
+    dpo.scored.clear()
+    run("fmcr")                                                    # initializes once, then refreshes 4 times
+    assert len(dpo.scored) == 5 and set(dpo.scored) == {100}
+
+
+def test_fmcr_saves_refresh_state_and_next_refresh_audit(tmp_path):
+    _, log = run("fmcr", progress_path=tmp_path / "history.csv")
+    snapshots = sorted(tmp_path.glob("fmcr_refresh_*.csv"))
+    assert len(snapshots) == 5
+    assert {"next_margin", "next_policy_margin", "actual_policy_nonpositive",
+            "actual_relative_nonpositive", "forecast_correct", "policy_recovered"} <= set(log.columns)
+    assert log["next_margin"].notna().sum() == 16  # four completed intervals, two steps x two slots
 
 
 def test_scoring_time_is_recorded_separately():

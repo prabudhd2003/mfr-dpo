@@ -190,6 +190,164 @@ def test_unknown_method_raises():
 def test_only_margin_based_methods_need_live_refreshes():
     assert mfr_replay.needs_refresh("mfr")
     assert mfr_replay.needs_refresh("lowest_margin")
+    assert mfr_replay.needs_refresh("fmcr")
     assert not mfr_replay.needs_refresh("random")
     assert not mfr_replay.needs_refresh("random_high")
     assert not mfr_replay.needs_refresh("none")
+
+
+# ------------------------------------------------------------------ FMCR
+
+def forecast_buffer(size=20, two_stages=False):
+    buffer = filled_buffer(size=size, two_stages=two_stages)
+    rows = buffer.rows()
+    initial = pd.DataFrame({
+        "margin": rows["current_margin"].to_numpy(),
+        "policy_margin": np.full(len(rows), 0.20),
+    }, index=rows["id"].values)
+    buffer.set_forecast_scores(initial, initialize=True)
+    return buffer
+
+
+def update_forecast(buffer, relative=None, policy=None, decay=0.0):
+    rows = buffer.rows()
+    relative = (rows["current_margin"].to_numpy() if relative is None
+                else np.asarray(relative, dtype=float))
+    policy = (rows["current_policy_margin"].to_numpy() if policy is None
+              else np.asarray(policy, dtype=float))
+    scores = pd.DataFrame(
+        {"margin": relative, "policy_margin": policy}, index=rows["id"].values
+    )
+    buffer.set_forecast_scores(scores, velocity_decay=decay)
+
+
+def test_fmcr_requires_initialized_policy_trajectories():
+    buffer = filled_buffer(size=20)
+    try:
+        plan_interval(buffer, "fmcr", 2, np.random.default_rng(0))
+        raise AssertionError("expected uninitialized forecast error")
+    except ValueError as error:
+        assert "initialized" in str(error)
+
+
+def test_fmcr_trajectory_uses_ema_and_resets_at_a_new_task():
+    buffer = forecast_buffer(size=4)
+    rows = buffer.rows()
+    initial_relative = rows["current_margin"].to_numpy()
+
+    update_forecast(
+        buffer,
+        relative=initial_relative - 0.10,
+        policy=np.full(len(rows), 0.10),
+        decay=0.5,
+    )
+    updated = buffer.rows()
+    assert np.allclose(updated["margin_velocity"], -0.05)
+    assert np.allclose(updated["policy_velocity"], -0.05)
+
+    reset_scores = pd.DataFrame(
+        {"margin": updated["current_margin"].to_numpy(),
+         "policy_margin": updated["current_policy_margin"].to_numpy()},
+        index=updated["id"].values,
+    )
+    buffer.set_forecast_scores(reset_scores, velocity_decay=0.5, initialize=True)
+    assert np.allclose(buffer.rows()[["margin_velocity", "policy_velocity"]], 0.0)
+
+
+def test_fmcr_prioritizes_actual_policy_failure():
+    buffer = forecast_buffer(size=20)
+    rows = buffer.rows()
+    relative = rows["current_margin"].to_numpy() - 0.01
+    policy = np.full(len(rows), 0.20)
+    policy[7] = -0.01
+    update_forecast(buffer, relative, policy)
+    plan = mfr_replay.plan_interval_details(buffer, "fmcr", 1, np.random.default_rng(0))
+    assert plan.iloc[0]["id"] == rows.iloc[7]["id"]
+    assert plan.iloc[0]["risk_label"] == "policy_failed"
+
+
+def test_fmcr_prioritizes_a_forecast_policy_crossing():
+    buffer = forecast_buffer(size=20)
+    rows = buffer.rows()
+    relative = rows["current_margin"].to_numpy()
+    policy = np.full(len(rows), 0.20)
+    policy[4] = 0.08  # velocity=-0.12, so the next forecast is below zero
+    update_forecast(buffer, relative, policy)
+    plan = mfr_replay.plan_interval_details(buffer, "fmcr", 1, np.random.default_rng(0))
+    assert plan.iloc[0]["id"] == rows.iloc[4]["id"]
+    assert plan.iloc[0]["risk_label"] == "forecast_policy_crossing"
+
+
+def test_fmcr_prioritizes_an_already_lost_relative_advantage():
+    buffer = forecast_buffer(size=20)
+    rows = buffer.rows()
+    relative = rows["current_margin"].to_numpy()
+    relative[6] = -0.10
+    update_forecast(buffer, relative, np.full(len(rows), 0.20))
+    relative[6] = -0.01  # it is recovering and forecast positive, but is still failed right now
+    update_forecast(buffer, relative, np.full(len(rows), 0.20))
+    plan = mfr_replay.plan_interval_details(buffer, "fmcr", 1, np.random.default_rng(0))
+    assert plan.iloc[0]["id"] == rows.iloc[6]["id"]
+    assert plan.iloc[0]["risk_label"] == "relative_failed"
+
+
+def test_fmcr_uses_relative_crossing_before_historical_fallback():
+    buffer = forecast_buffer(size=20)
+    rows = buffer.rows()
+    relative = rows["current_margin"].to_numpy()
+    policy = np.full(len(rows), 0.20)
+    relative[3] = max(0.001, relative[3] * 0.20)  # crosses relative zero next interval
+    update_forecast(buffer, relative, policy)
+    plan = mfr_replay.plan_interval_details(buffer, "fmcr", 1, np.random.default_rng(0))
+    assert plan.iloc[0]["id"] == rows.iloc[3]["id"]
+    assert plan.iloc[0]["risk_label"] == "forecast_relative_crossing"
+
+
+def test_fmcr_fallback_is_original_mfr_drop():
+    buffer = forecast_buffer(size=20)
+    rows = buffer.rows()
+    relative = rows["current_margin"].to_numpy()
+    relative[11] -= 0.01
+    policy = np.full(len(rows), 0.20)
+    update_forecast(buffer, relative, policy)
+    plan = mfr_replay.plan_interval_details(buffer, "fmcr", 1, np.random.default_rng(0))
+    assert plan.iloc[0]["id"] == rows.iloc[11]["id"]
+    assert plan.iloc[0]["risk_label"] == "historical_drop_fallback"
+
+
+def test_fmcr_balances_datasets_and_interleaves_them():
+    buffer = forecast_buffer(size=40, two_stages=True)
+    rows = buffer.rows()
+    relative = rows["current_margin"].to_numpy() - 0.01
+    policy = np.where(rows["dataset"].eq("safe"), -0.10, 0.20)
+    update_forecast(buffer, relative, policy)
+    plan = mfr_replay.plan_interval_details(buffer, "fmcr", 10, np.random.default_rng(0))
+    assert plan["dataset"].value_counts().to_dict() == {"safe": 5, "helpful": 5}
+    assert all(plan.iloc[i]["dataset"] != plan.iloc[i + 1]["dataset"]
+               for i in range(len(plan) - 1))
+
+
+def test_fmcr_rotates_an_odd_quota_remainder():
+    buffer = forecast_buffer(size=40, two_stages=True)
+    rows = buffer.rows()
+    update_forecast(buffer, rows["current_margin"].to_numpy() - 0.01, np.full(len(rows), 0.2))
+    first = mfr_replay.plan_interval_details(
+        buffer, "fmcr", 5, np.random.default_rng(0), plan_index=0
+    )
+    second = mfr_replay.plan_interval_details(
+        buffer, "fmcr", 5, np.random.default_rng(0), plan_index=1
+    )
+    first_majority = first["dataset"].value_counts().idxmax()
+    second_majority = second["dataset"].value_counts().idxmax()
+    assert first_majority != second_majority
+
+
+def test_fmcr_is_seeded_and_auditable():
+    buffer = forecast_buffer(size=20)
+    rows = buffer.rows()
+    update_forecast(buffer, rows["current_margin"].to_numpy(), np.full(len(rows), 0.2))
+    a = mfr_replay.plan_interval_details(buffer, "fmcr", 5, np.random.default_rng(9))
+    b = mfr_replay.plan_interval_details(buffer, "fmcr", 5, np.random.default_rng(9))
+    assert a["id"].tolist() == b["id"].tolist()
+    assert {"forecast_margin", "forecast_policy_margin", "time_to_crossing",
+            "historical_drop", "risk_tier", "risk_label", "dataset_quota"} <= set(a.columns)

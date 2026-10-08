@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from mfr_utils import (load_protocol, method_old_per_step, validate_resume_settings,
-                       validate_stage1_source)
+                       stage1_compatibility_sha256, validate_stage1_source)
 
 
 def test_protocol_uses_exact_ten_percent_replay():
@@ -12,6 +12,7 @@ def test_protocol_uses_exact_ten_percent_replay():
     assert protocol["new_per_step"] == 18 and protocol["old_per_step"] == 2
     assert protocol["methods"] == ["none", "random", "mfr"]
     assert "random_high" in protocol["secondary_methods"]
+    assert "fmcr" in protocol["secondary_methods"]
     assert protocol["orders"]["3"] == ["quality", "helpful", "safe"]
     assert protocol["orders"]["4"] == ["quality", "safe", "helpful"]
     assert method_old_per_step(protocol, "random") == 2
@@ -37,12 +38,50 @@ def test_resume_rejects_different_scientific_code():
 
 def test_stage1_can_be_shared_across_replay_budgets_and_commits():
     common = {
-        "protocol_version": "2.0", "data_version": "v2", "data_manifest_sha256": "data",
-        "model_name": "model", "model_revision": "revision", "order_id": 1, "seed": 0,
+        "protocol_version": "2.1", "data_version": "v2", "data_manifest_sha256": "data",
+        "model_name": "model", "model_revision": "revision", "order_id": 1,
+        "order": ["helpful", "safe", "quality"], "seed": 0,
         "lr": 1e-4, "beta": 0.1, "new_per_step": 18, "max_tokens": 1024,
+        "buffer_size": 500, "micro_batch": 2,
         "lora_r": 16, "lora_alpha": 32, "lora_dropout": 0.05, "epochs": 1,
         "scientific_code_sha256": "same-code",
     }
-    source = {**common, "method": "none", "old_per_step": 2, "git_commit": "old"}
-    high_random = {**common, "method": "random_high", "old_per_step": 3, "git_commit": "new"}
+    signature = stage1_compatibility_sha256(common)
+    source = {**common, "method": "none", "old_per_step": 2, "git_commit": "old",
+              "stage1_compatibility_sha256": signature}
+    high_random = {**common, "method": "random_high", "old_per_step": 3, "git_commit": "new",
+                   "stage1_compatibility_sha256": signature}
     assert validate_stage1_source(high_random, source)
+
+
+def test_legacy_protocol_21_stage1_source_is_explicitly_supported():
+    current = {
+        "protocol_version": "2.1", "data_version": "v2", "data_manifest_sha256": "data",
+        "model_name": "model", "model_revision": "revision", "order_id": 1,
+        "order": ["helpful", "safe", "quality"], "seed": 0, "lr": 1e-4, "beta": 0.1,
+        "new_per_step": 18, "max_tokens": 1024, "buffer_size": 500, "micro_batch": 2,
+        "lora_r": 16, "lora_alpha": 32, "lora_dropout": 0.05, "epochs": 1,
+    }
+    current["stage1_compatibility_sha256"] = stage1_compatibility_sha256(current)
+    source = {key: value for key, value in current.items()
+              if key != "stage1_compatibility_sha256"}
+    source.update({"method": "none", "scientific_code_sha256": "legacy", "git_commit": "abc"})
+    assert validate_stage1_source(current, source)
+
+
+def test_stage1_rejects_a_changed_training_input():
+    current = {
+        "data_version": "v2", "data_manifest_sha256": "data", "model_name": "model",
+        "model_revision": "revision", "order_id": 1, "order": ["helpful", "safe", "quality"],
+        "seed": 0, "lr": 1e-4, "beta": 0.1, "new_per_step": 18, "max_tokens": 1024,
+        "buffer_size": 500, "micro_batch": 2, "lora_r": 16, "lora_alpha": 32,
+        "lora_dropout": 0.05, "epochs": 1,
+    }
+    current["stage1_compatibility_sha256"] = stage1_compatibility_sha256(current)
+    source = {**current, "lr": 2e-4}
+    source["stage1_compatibility_sha256"] = stage1_compatibility_sha256(source)
+    try:
+        validate_stage1_source(current, source)
+        raise AssertionError("expected incompatible stage 1")
+    except ValueError as error:
+        assert "lr" in str(error)

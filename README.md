@@ -37,7 +37,9 @@ The five completed methods are:
 | Random 14.3% | Use more random replay to test whether budget alone explains the result. |
 | Lowest margin | Replay pairs with the lowest current reference-relative margin. |
 
-Balanced MFR and At-Risk MFR are planned next. They are **not implemented or evaluated yet**.
+Forecasted Margin-Crossing Replay (FMCR) is implemented and awaiting evaluation. It forecasts which old preference
+pairs are likely to cross a failure boundary before the next buffer refresh and replays them before that happens.
+Balanced MFR and At-Risk MFR are planned separately and are **not implemented or evaluated yet**.
 
 ## Data
 
@@ -103,8 +105,9 @@ What these results support:
   information, but the current results show that present difficulty is a very strong replay signal.
 
 These are validation results from two seeds, not final test results. They support a controlled project conclusion,
-but not a broad claim that MFR is universally better. Balanced MFR and At-Risk MFR will test whether MFR can improve
-by controlling behavior allocation and combining historical forgetting with actual current preference failure.
+but not a broad claim that MFR is universally better. FMCR will test whether forecasting future failures is more
+useful than reacting to current difficulty. Balanced MFR and At-Risk MFR will separately test behavior allocation and
+actual current preference failure.
 
 ## Repository structure
 

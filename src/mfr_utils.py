@@ -19,6 +19,7 @@ SCIENTIFIC_CODE_PATHS = (
     "src/mfr_replay.py",
     "src/mfr_utils.py",
 )
+STAGE1_ALGORITHM_VERSION = "1.0"
 
 
 def seed_everything(seed):
@@ -58,7 +59,8 @@ def load_protocol(path="configs/experiment_protocol.json"):
         protocol = json.load(stream)
     required = {"protocol_version", "data_version", "model_name", "model_revision", "orders",
                 "lora_r", "lora_alpha", "lora_dropout", "epochs", "learning_rate", "beta",
-                "new_per_step", "old_per_step", "buffer_size", "refreshes"}
+                "new_per_step", "old_per_step", "buffer_size", "refreshes",
+                "fmcr_velocity_decay", "fmcr_forecast_horizon"}
     missing = required - set(protocol)
     if missing:
         raise ValueError(f"protocol is missing {sorted(missing)}")
@@ -69,6 +71,10 @@ def load_protocol(path="configs/experiment_protocol.json"):
         raise ValueError("this experiment runner supports exactly one epoch; set epochs to 1")
     if protocol["lora_alpha"] <= 0 or not 0 <= protocol["lora_dropout"] < 1:
         raise ValueError("invalid LoRA alpha/dropout in protocol")
+    if not 0 <= protocol["fmcr_velocity_decay"] < 1:
+        raise ValueError("fmcr_velocity_decay must be in [0, 1)")
+    if protocol["fmcr_forecast_horizon"] <= 0:
+        raise ValueError("fmcr_forecast_horizon must be positive")
     known_methods = set(protocol.get("methods", [])) | set(protocol.get("secondary_methods", []))
     for method, old_per_step in protocol.get("old_per_step_overrides", {}).items():
         if method not in known_methods:
@@ -109,6 +115,26 @@ def scientific_code_sha256(repo_dir="."):
     return digest.hexdigest()
 
 
+def stage1_compatibility_sha256(settings):
+    """Fingerprint only the frozen Stage-1 algorithm and inputs.
+
+    Replay selection is inactive in Stage 1. Keeping this signature separate from the full code
+    hash allows audited replay-only extensions to borrow an existing Stage-1 checkpoint while full
+    resume validation remains strict.
+    """
+    keys = (
+        "data_version", "data_manifest_sha256", "model_name", "model_revision", "order_id", "order",
+        "seed", "lr", "beta", "new_per_step", "max_tokens", "buffer_size", "micro_batch",
+        "lora_r", "lora_alpha", "lora_dropout", "epochs",
+    )
+    payload = {
+        "stage1_algorithm_version": STAGE1_ALGORITHM_VERSION,
+        **{key: settings.get(key) for key in keys},
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def save_json_atomic(value, path):
     """Write JSON through a temporary file in the destination directory."""
     path = Path(path)
@@ -126,11 +152,28 @@ def save_json_atomic(value, path):
 
 def validate_stage1_source(settings, source_settings):
     """Reject a borrowed stage-1 checkpoint produced by an incompatible run."""
-    keys = ("protocol_version", "data_version", "data_manifest_sha256", "model_name", "model_revision",
-            "order_id", "seed", "lr", "beta", "new_per_step", "max_tokens",
-            "lora_r", "lora_alpha", "lora_dropout", "epochs", "scientific_code_sha256")
+    keys = ("data_version", "data_manifest_sha256", "model_name", "model_revision",
+            "order_id", "order", "seed", "lr", "beta", "new_per_step", "max_tokens",
+            "buffer_size", "lora_r", "lora_alpha", "lora_dropout", "epochs")
     mismatches = {key: (settings.get(key), source_settings.get(key))
                   for key in keys if settings.get(key) != source_settings.get(key)}
+    source_signature = source_settings.get("stage1_compatibility_sha256")
+    current_signature = settings.get("stage1_compatibility_sha256")
+    if source_signature is not None and current_signature != source_signature:
+        mismatches["stage1_compatibility_sha256"] = (current_signature, source_signature)
+    elif source_signature is None:
+        # Explicit legacy path for the completed v2/protocol-2.1 grid. Those runs predate the
+        # separate Stage-1 fingerprint but record their full code hash and Git commit. Exact Stage-1
+        # settings above must still match. Future protocols may not use this compatibility path.
+        legacy_ok = (
+            source_settings.get("protocol_version") == "2.1"
+            and source_settings.get("data_version") == "v2"
+            and source_settings.get("method") == "none"
+            and bool(source_settings.get("scientific_code_sha256"))
+            and bool(source_settings.get("git_commit"))
+        )
+        if not legacy_ok:
+            mismatches["stage1_compatibility_sha256"] = (current_signature, source_signature)
     if mismatches:
         detail = ", ".join(f"{key}: {left!r} != {right!r}"
                            for key, (left, right) in mismatches.items())
@@ -143,7 +186,8 @@ def validate_resume_settings(settings, saved):
     keys = ("run_name", "order_id", "order", "method", "seed", "protocol_version", "data_version",
             "data_manifest_sha256", "model_name", "model_revision", "lr", "beta", "new_per_step",
             "old_per_step", "max_tokens", "buffer_size", "refreshes", "lora_r", "lora_alpha",
-            "lora_dropout", "epochs", "stage1_run_name", "scientific_code_sha256")
+            "lora_dropout", "epochs", "micro_batch", "fmcr_velocity_decay",
+            "fmcr_forecast_horizon", "stage1_run_name", "scientific_code_sha256")
     mismatches = {key: (settings.get(key), saved.get(key))
                   for key in keys if settings.get(key) != saved.get(key)}
     if mismatches:

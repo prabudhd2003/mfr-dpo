@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 import time
 
 import numpy as np
@@ -247,7 +248,8 @@ def train_stage(model, tokenizer, df, beta=0.1, lr=1e-4, pairs_per_step=18, micr
 def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.1, lr=1e-4,
                        new_per_step=18, old_per_step=2, refreshes=5, micro_batch=2,
                        max_tokens=1024, seed=0, max_share_per_dataset=None, score_batch_size=4,
-                       desc="training", progress_path=None, save_every=25, reference_cache=None):
+                       desc="training", progress_path=None, save_every=25, reference_cache=None,
+                       fmcr_velocity_decay=0.5, fmcr_forecast_horizon=1.0):
     """Train once over new data with auditable replay; default batches are exactly 90/10 new/old."""
     import mfr_replay
     from mfr_utils import seed_everything
@@ -272,17 +274,53 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
     for step in bar:
         interval = step // interval_len
         if replaying and step % interval_len == 0:
-            if step > 0 and mfr_replay.needs_refresh(method):
+            # FMCR must score at step zero to initialize absolute policy margins. This also resets
+            # velocities at each task boundary so a trend from the previous task is never projected
+            # into the new one. Other margin methods retain the original four-refresh schedule.
+            should_score = mfr_replay.needs_refresh(method) and (step > 0 or method == "fmcr")
+            if should_score:
                 refresh_started = time.time()
                 scores = score_pairs(
                     model, tokenizer, buffer.rows(), beta=beta, batch_size=score_batch_size,
                     max_tokens=max_tokens, desc="refreshing buffer", reference_cache=reference_cache
                 )
-                buffer.set_current(scores["margin"])
+                if method == "fmcr":
+                    if step > 0:
+                        # Attach the next observed state to the previous interval's selections.
+                        # The last interval has no in-stage successor and remains intentionally NA.
+                        for event in replay_log:
+                            if event["interval"] != interval:
+                                continue
+                            pair_id = event["id"]
+                            next_margin = float(scores.loc[pair_id, "margin"])
+                            next_policy = float(scores.loc[pair_id, "policy_margin"])
+                            event["next_margin"] = next_margin
+                            event["next_policy_margin"] = next_policy
+                            event["actual_relative_nonpositive"] = bool(next_margin <= 0)
+                            event["actual_policy_nonpositive"] = bool(next_policy <= 0)
+                            label = event.get("risk_label")
+                            if label == "forecast_policy_crossing":
+                                event["forecast_correct"] = bool(next_policy <= 0)
+                            elif label == "forecast_relative_crossing":
+                                event["forecast_correct"] = bool(next_margin <= 0)
+                            else:
+                                event["forecast_correct"] = np.nan
+                            event["policy_recovered"] = bool(
+                                event.get("current_policy_margin", np.inf) <= 0 and next_policy > 0
+                            )
+                    buffer.set_forecast_scores(
+                        scores, velocity_decay=fmcr_velocity_decay, initialize=(step == 0)
+                    )
+                else:
+                    buffer.set_current(scores["margin"])
                 scoring_seconds += time.time() - refresh_started
             plan = mfr_replay.plan_interval_details(
-                buffer, method, interval_len * old_per_step, rng, max_share_per_dataset
+                buffer, method, interval_len * old_per_step, rng, max_share_per_dataset,
+                plan_index=interval, forecast_horizon=fmcr_forecast_horizon,
             )
+            if method == "fmcr" and progress_path:
+                refresh_path = Path(progress_path).parent / f"fmcr_refresh_{interval + 1}.csv"
+                buffer.rows().to_csv(refresh_path, index=False)
             plan_at = 0
 
         new_pairs = rows[step * new_per_step:(step + 1) * new_per_step]
@@ -317,5 +355,9 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
     elapsed = (time.time() - started) / 60
     print(f"Done: {len(rows)} new + {len(replay_log)} replayed in {elapsed:.1f} min "
           f"({scoring_seconds / 60:.1f} min scoring), peak {_peak_gb():.1f} GB")
-    columns = ["step", "interval", "id", "dataset", "selection_score", "selection_rank", "method"]
-    return pd.DataFrame(history), pd.DataFrame(replay_log, columns=columns)
+    columns = ["step", "interval", *mfr_replay.PLAN_COLUMNS]
+    if replay_log:
+        replay_frame = pd.DataFrame(replay_log)
+    else:
+        replay_frame = pd.DataFrame(columns=columns)
+    return pd.DataFrame(history), replay_frame

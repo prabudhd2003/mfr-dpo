@@ -11,7 +11,7 @@
     "4": ["quality", "safe", "helpful"]
   },
   "methods": ["none", "random", "mfr"],
-  "secondary_methods": ["random_high", "lowest_margin"],
+  "secondary_methods": ["random_high", "lowest_margin", "fmcr"],
   "seeds": [0, 1],
   "train_pairs": 2000,
   "val_pairs": 200,
@@ -32,6 +32,8 @@
   "buffer_size": 500,
   "refreshes": 5,
   "max_share_per_dataset": 0.75,
+  "fmcr_velocity_decay": 0.5,
+  "fmcr_forecast_horizon": 1.0,
   "primary_metric": "accuracy",
   "secondary_metric": "accuracy_sum",
   "new_learning_tolerance_points": 2.0,

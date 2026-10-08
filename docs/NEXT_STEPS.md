@@ -66,24 +66,51 @@ Write the selection rule before looking at the locked test. A reasonable rule is
 Record the chosen method, checkpoint rule, metrics, and exact Git commit. After this point, do not tune the method on
 locked-test outcomes.
 
-## 5. Decide whether to implement the forecasted method
+## 5. Evaluate Forecasted Margin-Crossing Replay
 
-If Balanced MFR or At-Risk MFR still cannot match lowest margin, the next research method is **Forecasted
-Margin-Crossing Replay (FMCR)**: replay pairs predicted to cross into failure at the next refresh rather than waiting
-until they have already failed.
+**Forecasted Margin-Crossing Replay (FMCR)** is implemented as the project's forward-looking method. It replays pairs
+predicted to cross into failure at the next refresh rather than waiting until they have already failed.
 
-FMCR would track both the reference-relative margin and absolute policy margin over time, estimate their recent
-slopes, forecast the next value, and prioritize:
+FMCR tracks both the reference-relative margin and absolute policy margin, uses an exponential moving average of
+their per-refresh changes, forecasts one refresh ahead, and prioritizes:
+
+```text
+velocity_t = 0.5 × velocity_(t-1) + 0.5 × (margin_t - margin_(t-1))
+forecast_t = margin_t + velocity_t
+```
+
+The same calculation is applied separately to both margins. At the start of each new task the velocities reset to
+zero, so a trend from the previous task is never projected into a different task.
 
 1. pairs already in absolute preference failure;
 2. pairs predicted to enter absolute failure;
-3. pairs predicted to lose their relative DPO advantage;
-4. largest historical drops as fallback;
+3. pairs that already lost their relative DPO advantage;
+4. pairs predicted to lose their relative DPO advantage;
+5. largest historical drops as fallback;
 
-with balanced quotas across old behaviors.
+with balanced quotas across old behaviors. The frozen settings are a velocity decay of `0.5` and a one-refresh
+forecast horizon. These values must not be changed after seeing FMCR validation results without declaring a new
+method variant.
 
-FMCR is a separate method-design decision, not part of the current Balanced/At-Risk implementation. Implement it
-only if the mechanism analysis supports the need and there is enough time to evaluate it properly.
+Run FMCR across all eight order–seed cells and compare it with Random 10%, original MFR, and Lowest Margin. In
+addition to the primary metrics, report forecast-tier counts, predicted crossings, actual next-refresh crossings,
+precision among selected pairs, and whether selected pairs crossed or recovered after replay. This is a trajectory
+audit, not causal proof that replay alone prevented a crossing; the method-level baseline comparisons provide the
+causal evidence.
+
+Each FMCR stage saves `fmcr_refresh_*.csv` snapshots for the full buffer. Its replay log also records the selected
+pair's tier, current state, forecast, next observed state when available, forecast correctness, and recovery. These
+files are the source for the mechanism analysis.
+
+### Research positioning
+
+FMCR should be described as a preference-specific extension of prioritized replay, not as the first method to
+anticipate forgetting in any continual-learning setting. [Maximally Interfered Retrieval](https://proceedings.neurips.cc/paper/2019/hash/15825aee15eb335cc13f9b559f166ee8-Abstract.html)
+predicts which memories would be harmed by a virtual incoming update. [COPR](https://aclanthology.org/2025.findings-acl.281/)
+studies continual preference learning through policy regularization. FMCR differs by forecasting the observed time
+trajectory of two preference-pair margins and replaying before a meaningful preference boundary is crossed, without
+a virtual gradient update. No exact prior method was found in the literature search, but the paper should still use
+the careful wording **“to our knowledge”** and include a complete related-work review.
 
 ## 6. Confirm on unseen seeds
 
@@ -149,6 +176,7 @@ useful finding is that current difficulty is more effective than historical decl
 
 - [ ] Balanced MFR implemented, tested, and run in all eight cells
 - [ ] At-Risk MFR implemented, tested, and run in all eight cells
+- [ ] FMCR run and analyzed in all eight cells
 - [ ] Full validation analysis and mechanism analysis complete
 - [ ] Final method and statistical plan frozen
 - [ ] Unseen-seed confirmation complete

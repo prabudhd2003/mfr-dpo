@@ -49,7 +49,7 @@ def parse_args():
     group.add_argument("--seed", type=int, required=True)
     group.add_argument(
         "--methods",
-        help="Comma-separated override; default is all five methods in the protocol",
+        help="Comma-separated override; default is every method configured in the protocol",
     )
     return parser.parse_args()
 

@@ -1,4 +1,4 @@
-"""The replay memory and the four ways to fill the replay slots.
+"""Replay memory and auditable replay-selection rules.
 
 The buffer holds `size` old preference pairs (500 by default), split evenly across the stages
 already learned. For every stored pair we keep:
@@ -13,9 +13,10 @@ The methods differ in which stored pairs fill the replay slots of each training 
     random_high     uniform sample from the buffer with a larger budget set by the runner
     lowest_margin   the lowest current_margin (hard pairs, forgotten or not)
     mfr             the largest drop, peak_margin - current_margin (our method)
+    fmcr            pairs forecast to cross a preference boundary before the next refresh
 
 Everything here is CPU-only and fully seeded: which pairs enter the buffer depends on the run seed
-and the dataset, never on the method, so all four methods store exactly the same pairs.
+and the dataset, never on the method, so every method stores exactly the same candidate pairs.
 """
 
 import numpy as np
@@ -23,9 +24,19 @@ import pandas as pd
 
 from mfr_utils import buffer_seed
 
-METHODS = ("none", "random", "random_high", "lowest_margin", "mfr")
-REFRESH_METHODS = ("lowest_margin", "mfr")
-EXTRA_COLUMNS = ["dataset", "peak_margin", "current_margin"]
+METHODS = ("none", "random", "random_high", "lowest_margin", "mfr", "fmcr")
+REFRESH_METHODS = ("lowest_margin", "mfr", "fmcr")
+FORECAST_COLUMNS = [
+    "previous_margin", "margin_velocity",
+    "current_policy_margin", "previous_policy_margin", "policy_velocity",
+]
+EXTRA_COLUMNS = ["dataset", "peak_margin", "current_margin", *FORECAST_COLUMNS]
+PLAN_COLUMNS = ["id", "dataset", "selection_score", "selection_rank", "method"]
+FMCR_PLAN_COLUMNS = [
+    *PLAN_COLUMNS, "risk_tier", "risk_label", "historical_drop",
+    "current_margin", "current_policy_margin", "margin_velocity", "policy_velocity",
+    "forecast_margin", "forecast_policy_margin", "time_to_crossing", "dataset_quota",
+]
 
 
 def needs_refresh(method):
@@ -54,13 +65,14 @@ class ReplayBuffer:
         n = min(self.size, len(train_df))
         return train_df.sample(n=n, random_state=buffer_seed(self.seed, dataset)).reset_index(drop=True)
 
-    def add_stage(self, dataset, rows, peak_margin):
+    def add_stage(self, dataset, rows, peak_margin, policy_margin=None):
         """Store a finished stage's candidates with their peak margins, then rebalance the buffer.
 
         peak_margin: Series indexed by pair id (from mfr_dpo.score_pairs(...)["margin"]).
         After this call the full buffer has exactly ``size`` rows whenever enough candidates exist;
         any remainder is assigned deterministically to the earliest stored datasets.
-        current_margin starts equal to peak_margin.
+        current_margin starts equal to peak_margin. Optional policy_margin is the policy's
+        absolute chosen-vs-rejected margin and is needed by forecast-based replay.
         """
         new = rows.copy()
         new["dataset"] = dataset
@@ -69,6 +81,17 @@ class ReplayBuffer:
             missing = new.loc[new["peak_margin"].isna(), "id"].tolist()[:3]
             raise ValueError(f"peak margins missing for {missing} ...")
         new["current_margin"] = new["peak_margin"]
+        new["previous_margin"] = new["peak_margin"]
+        new["margin_velocity"] = 0.0
+        if policy_margin is None:
+            new["current_policy_margin"] = np.nan
+        else:
+            new["current_policy_margin"] = new["id"].map(policy_margin).astype(float)
+            if new["current_policy_margin"].isna().any():
+                missing = new.loc[new["current_policy_margin"].isna(), "id"].tolist()[:3]
+                raise ValueError(f"policy margins missing for {missing} ...")
+        new["previous_policy_margin"] = new["current_policy_margin"]
+        new["policy_velocity"] = 0.0
 
         self._rows = pd.concat([self._rows, new], ignore_index=True) if len(self._rows) else new
         self._rebalance()
@@ -103,7 +126,61 @@ class ReplayBuffer:
     def set_current(self, margin):
         """Update current margins from a fresh scoring pass (Series indexed by pair id)."""
         updated = self._rows["id"].map(margin)
+        self._rows["previous_margin"] = self._rows["current_margin"].astype(float)
         self._rows["current_margin"] = updated.fillna(self._rows["current_margin"]).astype(float)
+
+    def set_forecast_scores(self, scores, velocity_decay=0.5, initialize=False):
+        """Update both margin trajectories used by FMCR.
+
+        ``scores`` must be indexed by pair id and contain ``margin`` and ``policy_margin``.
+        At the beginning of every new training stage, ``initialize=True`` resets velocities so
+        slopes from the previous task are never extrapolated into the next task. Later updates use
+        an exponential moving average of the per-refresh change.
+        """
+        required = {"margin", "policy_margin"}
+        missing_columns = required - set(scores.columns)
+        if missing_columns:
+            raise ValueError(f"forecast scores are missing columns {sorted(missing_columns)}")
+        if not 0 <= float(velocity_decay) < 1:
+            raise ValueError("velocity_decay must be in [0, 1)")
+
+        relative = self._rows["id"].map(scores["margin"])
+        policy = self._rows["id"].map(scores["policy_margin"])
+        if relative.isna().any() or policy.isna().any():
+            missing = self._rows.loc[relative.isna() | policy.isna(), "id"].tolist()[:3]
+            raise ValueError(f"forecast scores missing for {missing} ...")
+        relative = relative.astype(float)
+        policy = policy.astype(float)
+
+        if initialize:
+            self._rows["previous_margin"] = relative
+            self._rows["current_margin"] = relative
+            self._rows["margin_velocity"] = 0.0
+            self._rows["previous_policy_margin"] = policy
+            self._rows["current_policy_margin"] = policy
+            self._rows["policy_velocity"] = 0.0
+            return
+
+        if self._rows["current_policy_margin"].isna().any():
+            raise ValueError("initialize forecast scores before updating a buffer with no policy-margin history")
+        old_relative = self._rows["current_margin"].astype(float)
+        old_policy = self._rows["current_policy_margin"].astype(float)
+        old_relative_velocity = self._rows["margin_velocity"].fillna(0.0).astype(float)
+        old_policy_velocity = self._rows["policy_velocity"].fillna(0.0).astype(float)
+        keep = float(velocity_decay)
+        learn = 1.0 - keep
+
+        self._rows["previous_margin"] = old_relative
+        self._rows["current_margin"] = relative
+        self._rows["margin_velocity"] = keep * old_relative_velocity + learn * (relative - old_relative)
+        self._rows["previous_policy_margin"] = old_policy
+        self._rows["current_policy_margin"] = policy
+        self._rows["policy_velocity"] = keep * old_policy_velocity + learn * (policy - old_policy)
+
+    def forecast_ready(self):
+        """Whether every buffered pair has the trajectory state required by FMCR."""
+        return all(column in self._rows and not self._rows[column].isna().any()
+                   for column in FORECAST_COLUMNS)
 
     def forgetting(self):
         """peak - current per pair (positive = forgotten)."""
@@ -121,12 +198,26 @@ class ReplayBuffer:
     def from_csv(cls, path, size=500, seed=0):
         buffer = cls(size=size, seed=seed)
         buffer._rows = pd.read_csv(path)
+        # Old Stage-1 buffers predate FMCR. Relative history can be initialized exactly from the
+        # saved current margin. Absolute policy margins remain missing until a mandatory live
+        # scoring pass at the beginning of the FMCR stage.
+        if "previous_margin" not in buffer._rows:
+            buffer._rows["previous_margin"] = buffer._rows["current_margin"]
+        if "margin_velocity" not in buffer._rows:
+            buffer._rows["margin_velocity"] = 0.0
+        if "current_policy_margin" not in buffer._rows:
+            buffer._rows["current_policy_margin"] = np.nan
+        if "previous_policy_margin" not in buffer._rows:
+            buffer._rows["previous_policy_margin"] = buffer._rows["current_policy_margin"]
+        if "policy_velocity" not in buffer._rows:
+            buffer._rows["policy_velocity"] = 0.0
         return buffer
 
 
 # -------------------------------------------------------------------- choosing
 
-def plan_interval(buffer, method, n_slots, rng, max_share_per_dataset=None):
+def plan_interval(buffer, method, n_slots, rng, max_share_per_dataset=None,
+                  plan_index=0, forecast_horizon=1.0):
     """Pair ids for the next interval's replay slots (one id per slot, in order).
 
     none: empty list. random/random_high: uniform without replacement. lowest_margin: lowest current margin.
@@ -134,19 +225,30 @@ def plan_interval(buffer, method, n_slots, rng, max_share_per_dataset=None):
     than slots, the ranking is cycled (each pair replayed more than once).
     max_share_per_dataset (e.g. 0.75) caps how much of one interval a single dataset may fill.
     """
-    details = plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset)
+    details = plan_interval_details(
+        buffer, method, n_slots, rng, max_share_per_dataset,
+        plan_index=plan_index, forecast_horizon=forecast_horizon,
+    )
     return details["id"].tolist() if len(details) else []
 
 
-def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=None):
+def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=None,
+                          plan_index=0, forecast_horizon=1.0):
     """Return the replay plan with auditable rank, score, dataset, and selection rule."""
     if method not in METHODS:
         raise ValueError(f"unknown replay method {method!r}; expected one of {METHODS}")
     if method == "none" or buffer is None or len(buffer) == 0 or n_slots <= 0:
-        return pd.DataFrame(columns=["id", "dataset", "selection_score", "selection_rank", "method"])
+        columns = FMCR_PLAN_COLUMNS if method == "fmcr" else PLAN_COLUMNS
+        return pd.DataFrame(columns=columns)
 
     rows = buffer.rows()
     tiebreak = rng.random(len(rows))
+
+    if method == "fmcr":
+        return _plan_fmcr(
+            rows, n_slots, tiebreak, plan_index=int(plan_index),
+            forecast_horizon=float(forecast_horizon),
+        )
 
     if method in ("random", "random_high"):
         score = tiebreak
@@ -168,7 +270,103 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
     repeats = [ranked.iloc[i % len(ranked)].copy() for i in range(n_slots)]
     selected = pd.DataFrame(repeats).reset_index(drop=True)
     selected["method"] = method
-    return selected[["id", "dataset", "selection_score", "selection_rank", "method"]]
+    return selected[PLAN_COLUMNS]
+
+
+def _plan_fmcr(rows, n_slots, tiebreak, plan_index=0, forecast_horizon=1.0):
+    """Balanced replay of pairs forecast to cross a preference boundary.
+
+    Priority tiers are intentionally defined by meaningful zero boundaries rather than tuned
+    thresholds: already failed absolute policy preference, forecast absolute failure, forecast loss
+    of reference-relative DPO advantage, then historical-drop fallback.
+    """
+    if forecast_horizon <= 0:
+        raise ValueError("forecast_horizon must be positive")
+    missing = [column for column in FORECAST_COLUMNS if column not in rows]
+    if missing or rows[FORECAST_COLUMNS].isna().any().any():
+        raise ValueError(
+            "FMCR requires initialized relative and policy-margin trajectories; "
+            f"missing or incomplete columns: {missing or FORECAST_COLUMNS}"
+        )
+
+    work = rows.copy()
+    work["_tiebreak"] = tiebreak
+    work["historical_drop"] = work["peak_margin"] - work["current_margin"]
+    work["forecast_margin"] = (
+        work["current_margin"] + forecast_horizon * work["margin_velocity"]
+    )
+    work["forecast_policy_margin"] = (
+        work["current_policy_margin"] + forecast_horizon * work["policy_velocity"]
+    )
+
+    already_failed = work["current_policy_margin"] <= 0
+    forecast_policy_failure = (~already_failed) & (work["forecast_policy_margin"] <= 0)
+    relative_failed = (
+        (~already_failed) & (~forecast_policy_failure) & (work["current_margin"] <= 0)
+    )
+    forecast_relative_failure = (
+        (~already_failed) & (~forecast_policy_failure) & (~relative_failed)
+        & (work["current_margin"] > 0) & (work["forecast_margin"] <= 0)
+    )
+    work["risk_tier"] = np.select(
+        [already_failed, forecast_policy_failure, relative_failed, forecast_relative_failure],
+        [0, 1, 2, 3], default=4,
+    ).astype(int)
+    labels = {
+        0: "policy_failed", 1: "forecast_policy_crossing",
+        2: "relative_failed", 3: "forecast_relative_crossing",
+        4: "historical_drop_fallback",
+    }
+    work["risk_label"] = work["risk_tier"].map(labels)
+
+    policy_fall = -work["policy_velocity"]
+    relative_fall = -work["margin_velocity"]
+    work["time_to_crossing"] = np.inf
+    work.loc[already_failed, "time_to_crossing"] = 0.0
+    valid_policy = forecast_policy_failure & (policy_fall > 0)
+    work.loc[valid_policy, "time_to_crossing"] = (
+        work.loc[valid_policy, "current_policy_margin"] / policy_fall[valid_policy]
+    )
+    work.loc[relative_failed, "time_to_crossing"] = 0.0
+    valid_relative = forecast_relative_failure & (relative_fall > 0)
+    work.loc[valid_relative, "time_to_crossing"] = (
+        work.loc[valid_relative, "current_margin"] / relative_fall[valid_relative]
+    )
+
+    # Within each tier, crossing time gives urgency and historical drop keeps the original MFR
+    # signal as a deterministic secondary criterion.
+    order = np.lexsort((
+        work["_tiebreak"].to_numpy(),
+        -work["historical_drop"].to_numpy(),
+        work["time_to_crossing"].to_numpy(),
+        work["risk_tier"].to_numpy(),
+    ))
+    work = work.iloc[order].copy()
+
+    datasets = list(dict.fromkeys(rows["dataset"]))
+    base, remainder = divmod(int(n_slots), len(datasets))
+    rotated = datasets[plan_index % len(datasets):] + datasets[:plan_index % len(datasets)]
+    quotas = {dataset: base + (index < remainder) for index, dataset in enumerate(rotated)}
+
+    selected_by_dataset = {}
+    for dataset in datasets:
+        ranked = work[work["dataset"] == dataset].copy().reset_index(drop=True)
+        ranked["selection_rank"] = np.arange(1, len(ranked) + 1)
+        ranked["selection_score"] = ranked["historical_drop"]
+        ranked["dataset_quota"] = int(quotas[dataset])
+        quota = int(quotas[dataset])
+        selected_by_dataset[dataset] = [ranked.iloc[i % len(ranked)].copy() for i in range(quota)]
+
+    # Round-robin interleaving keeps each optimizer step balanced when two replay slots are used.
+    interleaved = []
+    for position in range(max(quotas.values())):
+        for dataset in rotated:
+            chosen = selected_by_dataset[dataset]
+            if position < len(chosen):
+                interleaved.append(chosen[position])
+    selected = pd.DataFrame(interleaved).reset_index(drop=True)
+    selected["method"] = "fmcr"
+    return selected[FMCR_PLAN_COLUMNS]
 
 
 def diagnostics(buffer):

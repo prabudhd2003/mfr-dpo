@@ -17,6 +17,7 @@ import mfr_dpo
 from mfr_replay import METHODS as IMPLEMENTED_METHODS, ReplayBuffer
 from mfr_utils import (file_sha256, load_protocol, mark_run_complete, method_old_per_step,
                        run_info, save_json_atomic, seed_everything, stage_seed,
+                       stage1_compatibility_sha256,
                        validate_resume_settings, validate_stage1_source)
 
 
@@ -61,20 +62,31 @@ def score_sets(model, tokenizer, splits, stage, trained_on, run_meta, run_dir, p
     return pd.DataFrame(rows)
 
 
-def update_buffer(model, tokenizer, buffer, stage, dataset, train_df, stage_dir, protocol, reference_cache):
+def update_buffer(model, tokenizer, buffer, stage, dataset, train_df, stage_dir, protocol,
+                  reference_cache, method):
     candidates = buffer.candidates(dataset, train_df)
-    peak = mfr_dpo.score_pairs(
+    peak_scores = mfr_dpo.score_pairs(
         model, tokenizer, candidates, beta=protocol["beta"], max_tokens=protocol["max_tokens"],
         reference_cache=reference_cache, desc=f"stage {stage}: buffer peak"
-    )["margin"]
-    buffer.add_stage(dataset, candidates, peak)
+    )
+    buffer.add_stage(
+        dataset, candidates, peak_scores["margin"], policy_margin=peak_scores["policy_margin"]
+    )
     older_rows = buffer.rows(exclude_dataset=dataset)
     if len(older_rows):
-        current = mfr_dpo.score_pairs(
+        current_scores = mfr_dpo.score_pairs(
             model, tokenizer, older_rows, beta=protocol["beta"], max_tokens=protocol["max_tokens"],
             reference_cache=reference_cache, desc=f"stage {stage}: older buffer state"
-        )["margin"]
-        buffer.set_current(current)
+        )
+        if method == "fmcr":
+            # Together these frames cover every row that survived buffer rebalancing.
+            all_scores = pd.concat([current_scores, peak_scores])
+            all_scores = all_scores[~all_scores.index.duplicated(keep="last")]
+            buffer.set_forecast_scores(
+                all_scores, velocity_decay=protocol["fmcr_velocity_decay"], initialize=False
+            )
+        else:
+            buffer.set_current(current_scores["margin"])
     buffer.to_csv(stage_dir / "buffer.csv")
     return buffer
 
@@ -138,7 +150,11 @@ def main():
         "stage1_run_name": Path(args.stage1_from).name if args.stage1_from else None,
         "lora_r": protocol["lora_r"], "lora_alpha": protocol["lora_alpha"],
         "lora_dropout": protocol["lora_dropout"], "epochs": protocol["epochs"],
+        "micro_batch": protocol["micro_batch"],
+        "fmcr_velocity_decay": protocol["fmcr_velocity_decay"],
+        "fmcr_forecast_horizon": protocol["fmcr_forecast_horizon"],
     }
+    settings["stage1_compatibility_sha256"] = stage1_compatibility_sha256(settings)
     current_info = run_info(ROOT)
     if current_info.get("git_dirty"):
         raise RuntimeError("refusing to start/resume a scientific run from an uncommitted Git checkout")
@@ -237,6 +253,8 @@ def main():
             max_share_per_dataset=protocol["max_share_per_dataset"],
             desc=f"stage {stage}: {dataset}", progress_path=stage_dir / "history.csv",
             reference_cache=reference_cache,
+            fmcr_velocity_decay=protocol["fmcr_velocity_decay"],
+            fmcr_forecast_horizon=protocol["fmcr_forecast_horizon"],
         )
         model.save_pretrained(stage_dir)
         print(f"Stage {stage}/{n_stages} training saved; scoring validation sets...", flush=True)
@@ -250,7 +268,7 @@ def main():
         if stage < len(order):
             buffer = update_buffer(
                 model, tokenizer, buffer, stage, dataset, splits[dataset]["train"], stage_dir,
-                protocol, reference_cache,
+                protocol, reference_cache, args.method,
             )
 
     expected = [run_dir / "settings.json", run_dir / "results.csv"] + [
