@@ -12,4 +12,4 @@ Before opening an active notebook on CARC, set the artifact directory in the ter
 export MFR_OUTPUT_DIR=/project2/xiangren_1987/grp26-mfr-dpo/artifacts
 ```
 
-Training and cache construction are submitted with `scripts/submit_carc.py` as described in `docs/RUNBOOK.md`.
+Training and cache construction are submitted with `scripts/submit_carc.py` as described in `docs/CARC.md`.
