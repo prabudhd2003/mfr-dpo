@@ -15,6 +15,10 @@ The methods differ in which stored pairs fill the replay slots of each training 
     mfr             the largest drop, peak_margin - current_margin (our method)
     fmcr            pairs forecast to cross a preference boundary before the next refresh
     cpmr            the lowest projected margin after a counterfactual new-task update interval
+    dapr            lowest-margin replay plus directional peak-token anchoring
+    dapr_c          DAPR with common-shift-centred token anchoring
+    mir_dpo         largest one-step increase in old-pair DPO loss (MIR adapted to DPO)
+    copr_adapted    lowest-margin replay plus a peak pair-distribution constraint
 
 Everything here is CPU-only and fully seeded: which pairs enter the buffer depends on the run seed
 and the dataset, never on the method, so every method stores exactly the same candidate pairs.
@@ -25,15 +29,26 @@ import pandas as pd
 
 from mfr_utils import buffer_seed
 
-METHODS = ("none", "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr")
-REFRESH_METHODS = ("lowest_margin", "mfr", "fmcr", "cpmr")
+METHODS = (
+    "none", "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr",
+    "dapr", "dapr_c", "mir_dpo", "copr_adapted",
+)
+REFRESH_METHODS = (
+    "lowest_margin", "mfr", "fmcr", "cpmr", "dapr", "dapr_c", "mir_dpo",
+    "copr_adapted",
+)
 FORECAST_COLUMNS = [
     "previous_margin", "margin_velocity",
     "current_policy_margin", "previous_policy_margin", "policy_velocity",
 ]
 COUNTERFACTUAL_COLUMNS = ["projected_margin", "predicted_drop"]
+MIR_COLUMNS = [
+    "current_margin_sum", "projected_margin_sum", "current_dpo_loss",
+    "projected_dpo_loss", "interference_score",
+]
 EXTRA_COLUMNS = [
     "dataset", "peak_margin", "current_margin", *FORECAST_COLUMNS, *COUNTERFACTUAL_COLUMNS,
+    *MIR_COLUMNS,
 ]
 PLAN_COLUMNS = ["id", "dataset", "selection_score", "selection_rank", "method"]
 FMCR_PLAN_COLUMNS = [
@@ -44,6 +59,10 @@ FMCR_PLAN_COLUMNS = [
 CPMR_PLAN_COLUMNS = [
     *PLAN_COLUMNS, "current_margin", "projected_margin", "worst_case_margin",
     "predicted_drop", "historical_drop",
+]
+MIR_PLAN_COLUMNS = [
+    *PLAN_COLUMNS, "current_margin", "current_margin_sum", "projected_margin_sum",
+    "current_dpo_loss", "projected_dpo_loss", "interference_score", "historical_drop",
 ]
 
 
@@ -102,6 +121,11 @@ class ReplayBuffer:
         new["policy_velocity"] = 0.0
         new["projected_margin"] = new["current_margin"]
         new["predicted_drop"] = 0.0
+        new["current_margin_sum"] = np.nan
+        new["projected_margin_sum"] = np.nan
+        new["current_dpo_loss"] = np.nan
+        new["projected_dpo_loss"] = np.nan
+        new["interference_score"] = np.nan
 
         self._rows = pd.concat([self._rows, new], ignore_index=True) if len(self._rows) else new
         self._rebalance()
@@ -203,6 +227,34 @@ class ReplayBuffer:
         self._rows["projected_margin"] = projected.astype(float)
         self._rows["predicted_drop"] = current.astype(float) - projected.astype(float)
 
+    def set_mir_scores(self, current_scores, projected_scores):
+        """Store the one-step DPO-loss increase used by MIR-DPO.
+
+        DPO loss for one pair is ``softplus(-margin_sum)``. A positive interference score means
+        that a virtual update on the incoming task makes the old preference harder.
+        """
+        for frame, label in ((current_scores, "current"), (projected_scores, "projected")):
+            if not {"margin", "margin_sum"} <= set(frame.columns):
+                raise ValueError(f"MIR-DPO {label} scores require margin and margin_sum")
+        ids = self._rows["id"]
+        current_margin = ids.map(current_scores["margin"])
+        current_sum = ids.map(current_scores["margin_sum"])
+        projected_sum = ids.map(projected_scores["margin_sum"])
+        if current_margin.isna().any() or current_sum.isna().any() or projected_sum.isna().any():
+            missing = self._rows.loc[
+                current_margin.isna() | current_sum.isna() | projected_sum.isna(), "id"
+            ].tolist()[:3]
+            raise ValueError(f"MIR-DPO scores missing for {missing} ...")
+        current_loss = np.logaddexp(0.0, -current_sum.astype(float))
+        projected_loss = np.logaddexp(0.0, -projected_sum.astype(float))
+        self._rows["previous_margin"] = self._rows["current_margin"].astype(float)
+        self._rows["current_margin"] = current_margin.astype(float)
+        self._rows["current_margin_sum"] = current_sum.astype(float)
+        self._rows["projected_margin_sum"] = projected_sum.astype(float)
+        self._rows["current_dpo_loss"] = current_loss
+        self._rows["projected_dpo_loss"] = projected_loss
+        self._rows["interference_score"] = projected_loss - current_loss
+
     def forecast_ready(self):
         """Whether every buffered pair has the trajectory state required by FMCR."""
         return all(column in self._rows and not self._rows[column].isna().any()
@@ -241,6 +293,9 @@ class ReplayBuffer:
             buffer._rows["projected_margin"] = buffer._rows["current_margin"]
         if "predicted_drop" not in buffer._rows:
             buffer._rows["predicted_drop"] = 0.0
+        for column in MIR_COLUMNS:
+            if column not in buffer._rows:
+                buffer._rows[column] = np.nan
         return buffer
 
 
@@ -269,7 +324,8 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
         raise ValueError(f"unknown replay method {method!r}; expected one of {METHODS}")
     if method == "none" or buffer is None or len(buffer) == 0 or n_slots <= 0:
         columns = (FMCR_PLAN_COLUMNS if method == "fmcr" else
-                   CPMR_PLAN_COLUMNS if method == "cpmr" else PLAN_COLUMNS)
+                   CPMR_PLAN_COLUMNS if method == "cpmr" else
+                   MIR_PLAN_COLUMNS if method == "mir_dpo" else PLAN_COLUMNS)
         return pd.DataFrame(columns=columns)
 
     rows = buffer.rows()
@@ -282,11 +338,13 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
         )
     if method == "cpmr":
         return _plan_cpmr(rows, n_slots, tiebreak, max_share_per_dataset)
+    if method == "mir_dpo":
+        return _plan_mir_dpo(rows, n_slots, tiebreak, max_share_per_dataset)
 
     if method in ("random", "random_high"):
         score = tiebreak
         order = np.argsort(tiebreak)                                     # a random permutation
-    elif method == "lowest_margin":
+    elif method in ("lowest_margin", "dapr", "dapr_c", "copr_adapted"):
         score = -rows["current_margin"].to_numpy()
         order = np.lexsort((tiebreak, rows["current_margin"].to_numpy()))          # ascending
     else:  # mfr
@@ -304,6 +362,32 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
     selected = pd.DataFrame(repeats).reset_index(drop=True)
     selected["method"] = method
     return selected[PLAN_COLUMNS]
+
+
+def _plan_mir_dpo(rows, n_slots, tiebreak, max_share_per_dataset=None):
+    """Select pairs whose DPO loss rises most after one virtual incoming-task update."""
+    missing = [column for column in MIR_COLUMNS if column not in rows]
+    if missing or rows[MIR_COLUMNS].isna().any().any():
+        raise ValueError(
+            "MIR-DPO requires current and projected DPO-loss scores; "
+            f"missing or incomplete columns: {missing or MIR_COLUMNS}"
+        )
+    work = rows.copy()
+    work["historical_drop"] = work["peak_margin"] - work["current_margin"]
+    order = np.lexsort((
+        tiebreak,
+        work["current_margin"].to_numpy(),
+        -work["interference_score"].to_numpy(),
+    ))
+    ranked = work.iloc[order].copy()
+    ranked["selection_score"] = ranked["interference_score"]
+    ranked["selection_rank"] = np.arange(1, len(ranked) + 1)
+    if max_share_per_dataset is not None:
+        ranked = _apply_cap(ranked, n_slots, max_share_per_dataset)
+    repeats = [ranked.iloc[i % len(ranked)].copy() for i in range(n_slots)]
+    selected = pd.DataFrame(repeats).reset_index(drop=True)
+    selected["method"] = "mir_dpo"
+    return selected[MIR_PLAN_COLUMNS]
 
 
 def _plan_cpmr(rows, n_slots, tiebreak, max_share_per_dataset=None):

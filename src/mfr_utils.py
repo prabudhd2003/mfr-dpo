@@ -61,6 +61,7 @@ def load_protocol(path="configs/experiment_protocol.json"):
                 "lora_r", "lora_alpha", "lora_dropout", "epochs", "learning_rate", "beta",
                 "new_per_step", "old_per_step", "buffer_size", "refreshes",
                 "fmcr_velocity_decay", "fmcr_forecast_horizon"}
+    required |= {"anchor_strength", "dapr_huber_delta", "mir_lookahead_steps"}
     missing = required - set(protocol)
     if missing:
         raise ValueError(f"protocol is missing {sorted(missing)}")
@@ -75,6 +76,10 @@ def load_protocol(path="configs/experiment_protocol.json"):
         raise ValueError("fmcr_velocity_decay must be in [0, 1)")
     if protocol["fmcr_forecast_horizon"] <= 0:
         raise ValueError("fmcr_forecast_horizon must be positive")
+    if protocol["anchor_strength"] < 0 or protocol["dapr_huber_delta"] <= 0:
+        raise ValueError("invalid DAPR/COPR anchor strength or Huber delta")
+    if not isinstance(protocol["mir_lookahead_steps"], int) or protocol["mir_lookahead_steps"] <= 0:
+        raise ValueError("mir_lookahead_steps must be a positive integer")
     known_methods = set(protocol.get("methods", [])) | set(protocol.get("secondary_methods", []))
     for method, old_per_step in protocol.get("old_per_step_overrides", {}).items():
         if method not in known_methods:
@@ -187,7 +192,9 @@ def validate_resume_settings(settings, saved):
             "data_manifest_sha256", "model_name", "model_revision", "lr", "beta", "new_per_step",
             "old_per_step", "max_tokens", "buffer_size", "refreshes", "lora_r", "lora_alpha",
             "lora_dropout", "epochs", "micro_batch", "fmcr_velocity_decay",
-            "fmcr_forecast_horizon", "cpmr_rule", "stage1_run_name", "scientific_code_sha256")
+            "fmcr_forecast_horizon", "anchor_strength", "dapr_huber_delta",
+            "mir_lookahead_steps", "cpmr_rule", "dapr_rule", "mir_dpo_rule",
+            "copr_adapted_rule", "stage1_run_name", "scientific_code_sha256")
     mismatches = {key: (settings.get(key), saved.get(key))
                   for key in keys if settings.get(key) != saved.get(key)}
     if mismatches:

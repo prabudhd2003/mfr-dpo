@@ -14,6 +14,7 @@ def test_protocol_uses_exact_ten_percent_replay():
     assert "random_high" in protocol["secondary_methods"]
     assert "fmcr" in protocol["secondary_methods"]
     assert "cpmr" in protocol["secondary_methods"]
+    assert {"dapr", "dapr_c", "mir_dpo", "copr_adapted"} <= set(protocol["secondary_methods"])
     assert protocol["orders"]["3"] == ["quality", "helpful", "safe"]
     assert protocol["orders"]["4"] == ["quality", "safe", "helpful"]
     assert method_old_per_step(protocol, "random") == 2

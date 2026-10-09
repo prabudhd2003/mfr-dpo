@@ -16,6 +16,7 @@ from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, get_linear_schedule_with_warmup
 
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
+ANCHOR_METHODS = ("dapr", "dapr_c", "copr_adapted")
 
 
 def load_model(model_name=MODEL_NAME, lora_r=16, adapter_path=None, revision=None,
@@ -82,6 +83,7 @@ def make_batch(tokenizer, rows, max_tokens=1024, device="cuda"):
         "response_mask": torch.tensor([mask + [0] * (width - len(mask)) for _, mask in seqs], device=device),
         "n_pairs": len(rows),
         "pair_ids": [row.get("id") for row in rows],
+        "is_replay": [bool(row.get("_is_replay", False)) for row in rows],
     }
 
 
@@ -89,15 +91,21 @@ def pair_length(row):
     return row["prompt_tokens"] + max(row["chosen_tokens"], row["rejected_tokens"])
 
 
-def response_logprobs(model, batch):
-    """Return summed response log probabilities and response lengths per sequence."""
+def response_token_logprobs(model, batch):
+    """Return response-token log probabilities, their sequence ids, and sequence lengths."""
     logits = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"]).logits[:, :-1, :]
     targets = batch["input_ids"][:, 1:]
     mask = batch["response_mask"][:, 1:].bool()
     token_logp = -F.cross_entropy(logits[mask].float(), targets[mask], reduction="none")
     seq_index = mask.nonzero()[:, 0]
-    sums = torch.zeros(mask.shape[0], device=token_logp.device, dtype=token_logp.dtype)
-    return sums.index_add(0, seq_index, token_logp), mask.sum(-1).float()
+    return token_logp, seq_index, mask.sum(-1)
+
+
+def response_logprobs(model, batch):
+    """Return summed response log probabilities and response lengths per sequence."""
+    token_logp, seq_index, lengths = response_token_logprobs(model, batch)
+    sums = torch.zeros(batch["input_ids"].shape[0], device=token_logp.device, dtype=token_logp.dtype)
+    return sums.index_add(0, seq_index, token_logp), lengths.float()
 
 
 def _cached_reference(batch, reference_cache, device):
@@ -126,12 +134,138 @@ def policy_minus_reference(model, batch, reference_cache=None):
     return policy - reference, lengths
 
 
-def dpo_loss(model, batch, beta, reference_cache=None):
-    """Standard summed-log-probability DPO loss."""
+def _huber(values, delta=1.0):
+    absolute = values.abs()
+    return torch.where(absolute <= delta, 0.5 * values.square(), delta * (absolute - 0.5 * delta))
+
+
+def _anchor_regularizer(method, policy, token_logp, seq_index, batch, anchors, huber_delta=1.0):
+    """Return a replay-only peak anchor penalty and transparent diagnostics."""
+    if method not in ANCHOR_METHODS:
+        zero = policy.new_zeros(())
+        return zero, {
+            "anchor_loss": 0.0, "chosen_violation_rate": 0.0,
+            "rejected_violation_rate": 0.0, "huber_cap_rate": 0.0,
+            "anchor_common_shift": 0.0, "anchored_pairs": 0,
+        }
+    if anchors is None:
+        raise ValueError(f"{method} requires peak preference anchors")
+
     n = batch["n_pairs"]
-    ratio, _ = policy_minus_reference(model, batch, reference_cache)
+    replay_indices = [
+        index for index, is_replay in enumerate(batch.get("is_replay", [False] * n)) if is_replay
+    ]
+    if not replay_indices:
+        zero = policy.new_zeros(())
+        return zero, {
+            "anchor_loss": 0.0, "chosen_violation_rate": 0.0,
+            "rejected_violation_rate": 0.0, "huber_cap_rate": 0.0,
+            "anchor_common_shift": 0.0, "anchored_pairs": 0,
+        }
+
+    penalties, chosen_rates, rejected_rates, cap_rates, shifts = [], [], [], [], []
+    for index in replay_indices:
+        pair_id = batch["pair_ids"][index]
+        if pair_id not in anchors:
+            raise KeyError(f"peak preference anchor missing for replay pair {pair_id!r}")
+        saved = anchors[pair_id]
+        current_chosen = token_logp[seq_index == index]
+        current_rejected = token_logp[seq_index == n + index]
+        anchor_chosen = torch.as_tensor(
+            saved["chosen"], device=current_chosen.device, dtype=current_chosen.dtype
+        )
+        anchor_rejected = torch.as_tensor(
+            saved["rejected"], device=current_rejected.device, dtype=current_rejected.dtype
+        )
+        if current_chosen.numel() != anchor_chosen.numel() or current_rejected.numel() != anchor_rejected.numel():
+            raise ValueError(
+                f"anchor/token length mismatch for {pair_id}: "
+                f"chosen {anchor_chosen.numel()} != {current_chosen.numel()}, "
+                f"rejected {anchor_rejected.numel()} != {current_rejected.numel()}"
+            )
+
+        if method == "copr_adapted":
+            current_log_distribution = F.log_softmax(
+                torch.stack([policy[index], policy[n + index]]), dim=0
+            )
+            target = torch.as_tensor(
+                [saved["chosen_sum"], saved["rejected_sum"]],
+                device=policy.device, dtype=policy.dtype,
+            )
+            target_log_distribution = F.log_softmax(target, dim=0)
+            penalty = 0.5 * (current_log_distribution - target_log_distribution).square().sum()
+            penalties.append(penalty)
+            chosen_rates.append(float(current_log_distribution[0] < target_log_distribution[0]))
+            rejected_rates.append(float(current_log_distribution[1] > target_log_distribution[1]))
+            cap_rates.append(0.0)
+            shifts.append(0.0)
+            continue
+
+        chosen_delta = current_chosen - anchor_chosen
+        rejected_delta = current_rejected - anchor_rejected
+        if method == "dapr_c":
+            common_shift = torch.cat([chosen_delta, rejected_delta]).mean().detach()
+        else:
+            common_shift = policy.new_zeros(())
+        chosen_violation = F.relu(common_shift - chosen_delta)
+        rejected_violation = F.relu(rejected_delta - common_shift)
+        violations = torch.cat([chosen_violation, rejected_violation])
+        penalties.append(_huber(chosen_violation, huber_delta).sum()
+                         + _huber(rejected_violation, huber_delta).sum())
+        chosen_rates.append((chosen_violation > 0).float().mean().item())
+        rejected_rates.append((rejected_violation > 0).float().mean().item())
+        cap_rates.append((violations > huber_delta).float().mean().item())
+        shifts.append(common_shift.item())
+
+    regularizer = torch.stack(penalties).mean()
+    return regularizer, {
+        "anchor_loss": regularizer.detach().item(),
+        "chosen_violation_rate": float(np.mean(chosen_rates)),
+        "rejected_violation_rate": float(np.mean(rejected_rates)),
+        "huber_cap_rate": float(np.mean(cap_rates)),
+        "anchor_common_shift": float(np.mean(shifts)),
+        "anchored_pairs": len(replay_indices),
+    }
+
+
+def dpo_loss(model, batch, beta, reference_cache=None, method="none", anchors=None,
+             anchor_strength=0.1, huber_delta=1.0, return_diagnostics=False):
+    """Summed-log-probability DPO, optionally with a replay-only peak constraint."""
+    n = batch["n_pairs"]
+    if method in ANCHOR_METHODS:
+        token_logp, seq_index, lengths = response_token_logprobs(model, batch)
+        policy = torch.zeros(
+            batch["input_ids"].shape[0], device=token_logp.device, dtype=token_logp.dtype
+        ).index_add(0, seq_index, token_logp)
+        if reference_cache is None:
+            with torch.no_grad(), model.disable_adapter():
+                reference, _ = response_logprobs(model, batch)
+        else:
+            reference = _cached_reference(batch, reference_cache, policy.device)
+        ratio = policy - reference
+    else:
+        ratio, _ = policy_minus_reference(model, batch, reference_cache)
+        policy = token_logp = seq_index = None
     logits = beta * (ratio[:n] - ratio[n:])
-    return -F.logsigmoid(logits).mean(), (logits > 0).float().mean().item()
+    base_loss = -F.logsigmoid(logits).mean()
+    if method in ANCHOR_METHODS:
+        regularizer, diagnostics = _anchor_regularizer(
+            method, policy, token_logp, seq_index, batch, anchors, huber_delta
+        )
+    else:
+        regularizer = base_loss.new_zeros(())
+        diagnostics = {
+            "anchor_loss": 0.0, "chosen_violation_rate": 0.0,
+            "rejected_violation_rate": 0.0, "huber_cap_rate": 0.0,
+            "anchor_common_shift": 0.0, "anchored_pairs": 0,
+        }
+    loss = base_loss + float(anchor_strength) * regularizer
+    diagnostics.update({
+        "dpo_loss": base_loss.detach().item(),
+        "weighted_anchor_loss": float(anchor_strength) * diagnostics["anchor_loss"],
+    })
+    result = (loss, (logits > 0).float().mean().item())
+    return (*result, diagnostics) if return_diagnostics else result
 
 
 @torch.no_grad()
@@ -172,6 +306,87 @@ def score_margins(model, tokenizer, df, beta=0.1, batch_size=4, max_tokens=1024,
                        reference_cache=reference_cache)["margin"]
 
 
+@torch.no_grad()
+def score_preference_anchors(model, tokenizer, df, batch_size=4, max_tokens=1024,
+                             desc="saving peak anchors"):
+    """Capture exact peak-time response-token log probabilities for DAPR/COPR-adapted."""
+    was_training = model.training
+    model.eval()
+    rows = df.to_dict("records")
+    order = sorted(
+        range(len(rows)), key=lambda i: pair_length(rows[i]) if "prompt_tokens" in rows[i] else 0
+    )
+    anchors = {}
+    for start in tqdm(
+        range(0, len(rows), batch_size), desc=desc, unit="batch", leave=True,
+        dynamic_ncols=True,
+    ):
+        indices = order[start:start + batch_size]
+        batch = make_batch(tokenizer, [rows[i] for i in indices], max_tokens)
+        token_logp, seq_index, _ = response_token_logprobs(model, batch)
+        n = len(indices)
+        for local, original in enumerate(indices):
+            chosen = token_logp[seq_index == local].detach().cpu().numpy().astype(np.float16)
+            rejected = token_logp[seq_index == n + local].detach().cpu().numpy().astype(np.float16)
+            anchors[rows[original]["id"]] = {
+                "chosen": chosen,
+                "rejected": rejected,
+                "chosen_sum": float(chosen.astype(np.float32).sum()),
+                "rejected_sum": float(rejected.astype(np.float32).sum()),
+            }
+    if was_training:
+        model.train()
+    return anchors
+
+
+def save_preference_anchors(anchors, path):
+    """Save a no-pickle compressed anchor sidecar suitable for audited stage resume."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ids = sorted(anchors)
+
+    def flatten(key):
+        arrays = [np.asarray(anchors[pair_id][key], dtype=np.float16) for pair_id in ids]
+        offsets = np.zeros(len(arrays) + 1, dtype=np.int64)
+        if arrays:
+            offsets[1:] = np.cumsum([array.size for array in arrays])
+            values = np.concatenate(arrays)
+        else:
+            values = np.array([], dtype=np.float16)
+        return values, offsets
+
+    chosen, chosen_offsets = flatten("chosen")
+    rejected, rejected_offsets = flatten("rejected")
+    np.savez_compressed(
+        path,
+        ids=np.asarray(ids, dtype=str),
+        chosen=chosen,
+        chosen_offsets=chosen_offsets,
+        rejected=rejected,
+        rejected_offsets=rejected_offsets,
+        chosen_sum=np.asarray([anchors[pair_id]["chosen_sum"] for pair_id in ids], dtype=np.float32),
+        rejected_sum=np.asarray([anchors[pair_id]["rejected_sum"] for pair_id in ids], dtype=np.float32),
+    )
+
+
+def load_preference_anchors(path):
+    """Load anchors written by :func:`save_preference_anchors` without pickle."""
+    with np.load(path, allow_pickle=False) as saved:
+        ids = saved["ids"].astype(str).tolist()
+        chosen, chosen_offsets = saved["chosen"], saved["chosen_offsets"]
+        rejected, rejected_offsets = saved["rejected"], saved["rejected_offsets"]
+        chosen_sum, rejected_sum = saved["chosen_sum"], saved["rejected_sum"]
+        return {
+            pair_id: {
+                "chosen": chosen[chosen_offsets[index]:chosen_offsets[index + 1]].copy(),
+                "rejected": rejected[rejected_offsets[index]:rejected_offsets[index + 1]].copy(),
+                "chosen_sum": float(chosen_sum[index]),
+                "rejected_sum": float(rejected_sum[index]),
+            }
+            for index, pair_id in enumerate(ids)
+        }
+
+
 def summarize(scores):
     """Aggregate pair scores. Accuracy is the percentage whose chosen answer has margin > 0."""
     out = {
@@ -191,23 +406,54 @@ def summarize(scores):
 
 
 def _train_microbatches(model, tokenizer, pairs, optimizer, params, beta, micro_batch, max_tokens,
-                        reference_cache=None):
+                        reference_cache=None, method="none", anchors=None,
+                        anchor_strength=0.1, huber_delta=1.0):
     optimizer.zero_grad()
     step_loss, step_acc = 0.0, 0.0
+    step_diagnostics = {
+        "dpo_loss": 0.0, "anchor_loss": 0.0, "weighted_anchor_loss": 0.0,
+        "chosen_violation_rate": 0.0, "rejected_violation_rate": 0.0,
+        "huber_cap_rate": 0.0, "anchor_common_shift": 0.0, "anchored_pairs": 0.0,
+    }
+    total_replay = sum(bool(pair.get("_is_replay", False)) for pair in pairs)
     for start in range(0, len(pairs), micro_batch):
         chunk = pairs[start:start + micro_batch]
         batch = make_batch(tokenizer, chunk, max_tokens)
-        if reference_cache is None:
-            loss, accuracy = dpo_loss(model, batch, beta)
-        else:
-            loss, accuracy = dpo_loss(model, batch, beta, reference_cache=reference_cache)
         weight = len(chunk) / len(pairs)
+        chunk_replay = sum(bool(pair.get("_is_replay", False)) for pair in chunk)
+        replay_weight = chunk_replay / total_replay if total_replay else 0.0
+        # The step objective is mean DPO over every pair plus alpha times mean anchor loss over
+        # replay pairs. Compensating here prevents the 10% replay share from silently shrinking
+        # alpha by another factor of ten during gradient accumulation.
+        effective_anchor_strength = (
+            float(anchor_strength) * replay_weight / weight if replay_weight else 0.0
+        )
+        result = dpo_loss(
+            model, batch, beta, reference_cache=reference_cache, method=method,
+            anchors=anchors, anchor_strength=effective_anchor_strength, huber_delta=huber_delta,
+            return_diagnostics=True,
+        )
+        if len(result) == 2:  # CPU bookkeeping tests replace dpo_loss with a two-value stand-in.
+            loss, accuracy = result
+            diagnostics = step_diagnostics
+        else:
+            loss, accuracy, diagnostics = result
         (loss * weight).backward()
         step_loss += loss.item() * weight
         step_acc += accuracy * weight
+        step_diagnostics["dpo_loss"] += float(diagnostics.get("dpo_loss", 0.0)) * weight
+        for key in (
+            "anchor_loss", "chosen_violation_rate", "rejected_violation_rate",
+            "huber_cap_rate", "anchor_common_shift",
+        ):
+            step_diagnostics[key] += float(diagnostics.get(key, 0.0)) * replay_weight
+        step_diagnostics["weighted_anchor_loss"] = (
+            float(anchor_strength) * step_diagnostics["anchor_loss"]
+        )
+        step_diagnostics["anchored_pairs"] += float(diagnostics.get("anchored_pairs", 0.0))
     torch.nn.utils.clip_grad_norm_(params, 1.0)
     optimizer.step()
-    return step_loss, step_acc
+    return step_loss, step_acc, step_diagnostics
 
 
 def _peak_gb():
@@ -216,7 +462,7 @@ def _peak_gb():
 
 def _counterfactual_projected_scores(
     model, tokenizer, buffer_rows, future_steps, optimizer, scheduler, params,
-    beta, micro_batch, max_tokens, score_batch_size, reference_cache,
+    beta, micro_batch, max_tokens, score_batch_size, reference_cache, label="CPMR",
 ):
     """Measure old-pair margins before and after a reversible new-data-only lookahead.
 
@@ -226,7 +472,7 @@ def _counterfactual_projected_scores(
     """
     current = score_pairs(
         model, tokenizer, buffer_rows, beta=beta, batch_size=score_batch_size,
-        max_tokens=max_tokens, desc="CPMR: current buffer", reference_cache=reference_cache,
+        max_tokens=max_tokens, desc=f"{label}: current buffer", reference_cache=reference_cache,
     )
     parameter_state = [parameter.detach().clone() for parameter in params]
     optimizer_state = copy.deepcopy(optimizer.state_dict())
@@ -240,7 +486,7 @@ def _counterfactual_projected_scores(
         # The caller passes one list per upcoming optimizer step. Keeping each step separate is
         # essential: one large batch would not reproduce the scheduled new-task trajectory.
         for pairs in tqdm(
-            future_steps, desc="CPMR: virtual lookahead", unit="step", leave=True,
+            future_steps, desc=f"{label}: virtual lookahead", unit="step", leave=True,
             dynamic_ncols=True,
         ):
             _train_microbatches(
@@ -250,7 +496,7 @@ def _counterfactual_projected_scores(
             scheduler.step()
         projected = score_pairs(
             model, tokenizer, buffer_rows, beta=beta, batch_size=score_batch_size,
-            max_tokens=max_tokens, desc="CPMR: projected buffer", reference_cache=reference_cache,
+            max_tokens=max_tokens, desc=f"{label}: projected buffer", reference_cache=reference_cache,
         )
     finally:
         with torch.no_grad():
@@ -285,7 +531,7 @@ def train_stage(model, tokenizer, df, beta=0.1, lr=1e-4, pairs_per_step=18, micr
         pairs = rows[step * pairs_per_step:(step + 1) * pairs_per_step]
         if "prompt_tokens" in pairs[0]:
             pairs = sorted(pairs, key=pair_length)
-        loss, accuracy = _train_microbatches(
+        loss, accuracy, _ = _train_microbatches(
             model, tokenizer, pairs, optimizer, params, beta, micro_batch, max_tokens, reference_cache
         )
         scheduler.step()
@@ -303,7 +549,9 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
                        new_per_step=18, old_per_step=2, refreshes=5, micro_batch=2,
                        max_tokens=1024, seed=0, max_share_per_dataset=None, score_batch_size=4,
                        desc="training", progress_path=None, save_every=25, reference_cache=None,
-                       fmcr_velocity_decay=0.5, fmcr_forecast_horizon=1.0):
+                       fmcr_velocity_decay=0.5, fmcr_forecast_horizon=1.0,
+                       anchors=None, anchor_strength=0.1, huber_delta=1.0,
+                       mir_lookahead_steps=1):
     """Train once over new data with auditable replay; default batches are exactly 90/10 new/old."""
     import mfr_replay
     from mfr_utils import seed_everything
@@ -328,10 +576,13 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
     for step in bar:
         interval = step // interval_len
         if replaying and step % interval_len == 0:
-            if method == "cpmr":
+            if method in ("cpmr", "mir_dpo"):
                 refresh_started = time.time()
                 upcoming_steps = []
-                for future_step in range(step, min(step + interval_len, n_steps)):
+                lookahead = interval_len if method == "cpmr" else int(mir_lookahead_steps)
+                if lookahead <= 0:
+                    raise ValueError("mir_lookahead_steps must be positive")
+                for future_step in range(step, min(step + lookahead, n_steps)):
                     future_pairs = rows[
                         future_step * new_per_step:(future_step + 1) * new_per_step
                     ]
@@ -341,8 +592,9 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
                 current_scores, projected_scores = _counterfactual_projected_scores(
                     model, tokenizer, buffer.rows(), upcoming_steps, optimizer, scheduler, params,
                     beta, micro_batch, max_tokens, score_batch_size, reference_cache,
+                    label="CPMR" if method == "cpmr" else "MIR-DPO",
                 )
-                if step > 0:
+                if method == "cpmr" and step > 0:
                     # These are observed margins after the previous interval's real training. The
                     # counterfactual projection assumed no replay, so their difference is a useful
                     # intervention diagnostic rather than a conventional forecast error.
@@ -354,15 +606,29 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
                         event["observed_minus_projected"] = (
                             next_margin - float(event["projected_margin"])
                         )
-                buffer.set_counterfactual_scores(
-                    current_scores["margin"], projected_scores["margin"]
-                )
+                if method == "mir_dpo" and step > 0:
+                    for event in replay_log:
+                        if event["interval"] != interval:
+                            continue
+                        next_margin_sum = float(current_scores.loc[event["id"], "margin_sum"])
+                        next_loss = float(np.logaddexp(0.0, -next_margin_sum))
+                        event["next_margin"] = float(current_scores.loc[event["id"], "margin"])
+                        event["next_dpo_loss"] = next_loss
+                        event["observed_minus_projected_loss"] = (
+                            next_loss - float(event["projected_dpo_loss"])
+                        )
+                if method == "cpmr":
+                    buffer.set_counterfactual_scores(
+                        current_scores["margin"], projected_scores["margin"]
+                    )
+                else:
+                    buffer.set_mir_scores(current_scores, projected_scores)
                 scoring_seconds += time.time() - refresh_started
 
             # FMCR must score at step zero to initialize absolute policy margins. This also resets
             # velocities at each task boundary so a trend from the previous task is never projected
             # into the new one. Other margin methods retain the original four-refresh schedule.
-            should_score = (method != "cpmr" and mfr_replay.needs_refresh(method)
+            should_score = (method not in ("cpmr", "mir_dpo") and mfr_replay.needs_refresh(method)
                             and (step > 0 or method == "fmcr"))
             if should_score:
                 refresh_started = time.time()
@@ -410,6 +676,9 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
             if method == "cpmr" and progress_path:
                 refresh_path = Path(progress_path).parent / f"cpmr_refresh_{interval + 1}.csv"
                 buffer.rows().to_csv(refresh_path, index=False)
+            if method == "mir_dpo" and progress_path:
+                refresh_path = Path(progress_path).parent / f"mir_dpo_refresh_{interval + 1}.csv"
+                buffer.rows().to_csv(refresh_path, index=False)
             plan_at = 0
 
         new_pairs = rows[step * new_per_step:(step + 1) * new_per_step]
@@ -419,13 +688,17 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
         selected = plan.iloc[plan_at:plan_at + step_old] if len(plan) else plan
         plan_at += step_old
         old_ids = selected["id"].tolist() if len(selected) else []
-        pairs = new_pairs + (buffer.get(old_ids) if old_ids else [])
+        marked_new = [{**pair, "_is_replay": False} for pair in new_pairs]
+        marked_old = [{**pair, "_is_replay": True} for pair in buffer.get(old_ids)] if old_ids else []
+        pairs = marked_new + marked_old
         for _, item in selected.iterrows():
             replay_log.append({"step": step + 1, "interval": interval + 1, **item.to_dict()})
         if "prompt_tokens" in pairs[0]:
             pairs = sorted(pairs, key=pair_length)
-        loss, accuracy = _train_microbatches(
-            model, tokenizer, pairs, optimizer, params, beta, micro_batch, max_tokens, reference_cache
+        loss, accuracy, diagnostics = _train_microbatches(
+            model, tokenizer, pairs, optimizer, params, beta, micro_batch, max_tokens,
+            reference_cache, method=method, anchors=anchors,
+            anchor_strength=anchor_strength, huber_delta=huber_delta,
         )
         scheduler.step()
         previous_examples = history[-1]["examples_seen"] if history else 0
@@ -436,6 +709,7 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
             "minutes": (time.time() - started) / 60,
             "scoring_minutes": scoring_seconds / 60,
             "peak_gpu_gb": _peak_gb(),
+            **diagnostics,
         })
         bar.set_postfix(loss=f"{loss:.4f}", accuracy=f"{100 * accuracy:.1f}%",
                         replay=len(old_ids))

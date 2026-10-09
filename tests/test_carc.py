@@ -17,7 +17,8 @@ SPEC.loader.exec_module(GROUP)
 def test_default_group_contains_all_configured_methods():
     protocol = GROUP.load_protocol()
     assert GROUP.requested_methods(protocol, None) == [
-        "none", "random", "mfr", "random_high", "lowest_margin", "fmcr", "cpmr"
+        "none", "random", "mfr", "random_high", "lowest_margin", "fmcr", "cpmr",
+        "dapr", "dapr_c", "mir_dpo", "copr_adapted",
     ]
 
 

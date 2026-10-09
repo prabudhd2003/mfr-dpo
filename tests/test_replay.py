@@ -99,7 +99,10 @@ def test_every_method_fills_exactly_the_slots():
         buffer.rows().set_index("id")["current_margin"],
         buffer.rows().set_index("id")["current_margin"],
     )
-    for method in ("random", "random_high", "lowest_margin", "mfr", "cpmr"):
+    for method in (
+        "random", "random_high", "lowest_margin", "mfr", "cpmr", "dapr", "dapr_c",
+        "copr_adapted",
+    ):
         plan = plan_interval(buffer, method, 24, np.random.default_rng(0))
         assert len(plan) == 24
         assert set(plan) <= set(buffer.rows()["id"])
@@ -122,6 +125,14 @@ def test_lowest_margin_picks_the_lowest_current_margins():
     picked = plan_interval(buffer, "lowest_margin", 3, np.random.default_rng(0))
     lowest = rows.nsmallest(3, "current_margin")["id"].tolist()
     assert set(picked) == set(lowest)
+
+
+def test_anchor_methods_use_the_same_selection_as_lowest_margin():
+    buffer = filled_buffer(size=20)
+    for method in ("dapr", "dapr_c", "copr_adapted"):
+        assert plan_interval(buffer, method, 5, np.random.default_rng(4)) == plan_interval(
+            buffer, "lowest_margin", 5, np.random.default_rng(4)
+        )
 
 
 def test_mfr_and_lowest_margin_differ():
@@ -196,6 +207,10 @@ def test_only_margin_based_methods_need_live_refreshes():
     assert mfr_replay.needs_refresh("lowest_margin")
     assert mfr_replay.needs_refresh("fmcr")
     assert mfr_replay.needs_refresh("cpmr")
+    assert mfr_replay.needs_refresh("dapr")
+    assert mfr_replay.needs_refresh("dapr_c")
+    assert mfr_replay.needs_refresh("mir_dpo")
+    assert mfr_replay.needs_refresh("copr_adapted")
     assert not mfr_replay.needs_refresh("random")
     assert not mfr_replay.needs_refresh("random_high")
     assert not mfr_replay.needs_refresh("none")
@@ -234,6 +249,21 @@ def test_cpmr_does_not_hide_a_currently_weak_pair_predicted_to_recover():
     plan = mfr_replay.plan_interval_details(buffer, "cpmr", 1, np.random.default_rng(0))
     assert plan.iloc[0]["id"] == rows.iloc[2]["id"]
     assert plan.iloc[0]["worst_case_margin"] == -0.20
+
+
+def test_mir_dpo_picks_the_largest_virtual_loss_increase():
+    buffer = filled_buffer(size=20)
+    rows = buffer.rows()
+    current = pd.DataFrame({
+        "margin": rows["current_margin"].to_numpy(),
+        "margin_sum": np.full(len(rows), 1.0),
+    }, index=rows["id"])
+    projected = current.copy()
+    projected.iloc[6, projected.columns.get_loc("margin_sum")] = -2.0
+    buffer.set_mir_scores(current, projected)
+    plan = mfr_replay.plan_interval_details(buffer, "mir_dpo", 1, np.random.default_rng(0))
+    assert plan.iloc[0]["id"] == rows.iloc[6]["id"]
+    assert plan.iloc[0]["interference_score"] > 0
 
 
 # ------------------------------------------------------------------ FMCR

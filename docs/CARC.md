@@ -145,6 +145,45 @@ CPMR performs reversible virtual training and averaged 48.75 minutes per run, co
 Lowest Margin. It should remain available as a completed baseline, but it does not need to be resubmitted for seeds
 0 and 1.
 
+### Run DAPR, DAPR-C, MIR-DPO, and COPR-adapted
+
+These four methods are implemented under the exact command names `dapr`, `dapr_c`, `mir_dpo`, and
+`copr_adapted`. Submit all four for every order and seed with:
+
+```bash
+for order in 1 2 3 4; do
+  for seed in 0 1; do
+    python scripts/submit_carc.py group \
+      --output-dir "$MFR_OUTPUT_DIR" \
+      --account xiangren_1987 \
+      --gpu l40s \
+      --time 04:00:00 \
+      --order "$order" \
+      --seed "$seed" \
+      --methods dapr,dapr_c,mir_dpo,copr_adapted
+  done
+done
+```
+
+This submits eight Slurm jobs. Each job runs its four methods sequentially on one L40S. It reuses the matching
+completed No-Replay Stage-1 checkpoint and does not rerun the seven completed methods. If the queue or four-hour
+limit becomes a problem, submit one method at a time by changing `--methods`, for example:
+
+```bash
+python scripts/submit_carc.py group \
+  --output-dir "$MFR_OUTPUT_DIR" \
+  --account xiangren_1987 \
+  --gpu l40s \
+  --time 04:00:00 \
+  --order 1 \
+  --seed 0 \
+  --methods mir_dpo
+```
+
+Do not submit the same order–seed–method combination twice. A failed group job is safe to resubmit: completed runs
+are skipped and an incomplete run resumes from its first unfinished stage. MIR-DPO may be the slowest of these four
+because every refresh scores the buffer before and after a reversible virtual update.
+
 After Balanced MFR is implemented and configured as `mfr_balanced`, run only that new method across all eight cells:
 
 ```bash

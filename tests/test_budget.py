@@ -115,7 +115,10 @@ def test_partial_final_batch_gets_proportional_replay():
 
 
 def test_replay_slots_per_step():
-    for method in ("random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr"):
+    for method in (
+        "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr", "dapr",
+        "dapr_c", "mir_dpo", "copr_adapted",
+    ):
         history, log = run(method)
         assert (history["n_replay"] == 2).all()                    # exactly 2 old pairs every step
         assert len(log) == 2 * len(history)
@@ -156,6 +159,22 @@ def test_cpmr_scores_current_and_projected_margins_every_interval():
     dpo.scored.clear()
     run("cpmr")
     assert len(dpo.scored) == 10 and set(dpo.scored) == {100}
+
+
+def test_mir_dpo_scores_before_and_after_one_virtual_step_every_interval():
+    dpo = load_dpo()
+    dpo.scored.clear()
+    run("mir_dpo")
+    assert len(dpo.scored) == 10 and set(dpo.scored) == {100}
+
+
+def test_mir_dpo_saves_interference_state_and_observed_audit(tmp_path):
+    _, log = run("mir_dpo", progress_path=tmp_path / "history.csv")
+    snapshots = sorted(tmp_path.glob("mir_dpo_refresh_*.csv"))
+    assert len(snapshots) == 5
+    assert {"interference_score", "projected_dpo_loss", "next_dpo_loss",
+            "observed_minus_projected_loss"} <= set(log.columns)
+    assert log["next_dpo_loss"].notna().sum() == 16
 
 
 def test_cpmr_saves_counterfactual_state_and_observed_audit(tmp_path):

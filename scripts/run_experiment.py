@@ -63,7 +63,7 @@ def score_sets(model, tokenizer, splits, stage, trained_on, run_meta, run_dir, p
 
 
 def update_buffer(model, tokenizer, buffer, stage, dataset, train_df, stage_dir, protocol,
-                  reference_cache, method):
+                  reference_cache, method, anchors=None):
     candidates = buffer.candidates(dataset, train_df)
     peak_scores = mfr_dpo.score_pairs(
         model, tokenizer, candidates, beta=protocol["beta"], max_tokens=protocol["max_tokens"],
@@ -72,6 +72,13 @@ def update_buffer(model, tokenizer, buffer, stage, dataset, train_df, stage_dir,
     buffer.add_stage(
         dataset, candidates, peak_scores["margin"], policy_margin=peak_scores["policy_margin"]
     )
+    if method in mfr_dpo.ANCHOR_METHODS:
+        if anchors is None:
+            raise ValueError(f"{method} requires a mutable preference-anchor store")
+        anchors.update(mfr_dpo.score_preference_anchors(
+            model, tokenizer, candidates, max_tokens=protocol["max_tokens"],
+            desc=f"stage {stage}: peak token anchors",
+        ))
     older_rows = buffer.rows(exclude_dataset=dataset)
     if len(older_rows):
         current_scores = mfr_dpo.score_pairs(
@@ -88,6 +95,12 @@ def update_buffer(model, tokenizer, buffer, stage, dataset, train_df, stage_dir,
         else:
             buffer.set_current(current_scores["margin"])
     buffer.to_csv(stage_dir / "buffer.csv")
+    if method in mfr_dpo.ANCHOR_METHODS:
+        kept = set(buffer.rows()["id"])
+        for pair_id in list(anchors):
+            if pair_id not in kept:
+                del anchors[pair_id]
+        mfr_dpo.save_preference_anchors(anchors, stage_dir / "preference_anchors.npz")
     return buffer
 
 
@@ -153,8 +166,19 @@ def main():
         "micro_batch": protocol["micro_batch"],
         "fmcr_velocity_decay": protocol["fmcr_velocity_decay"],
         "fmcr_forecast_horizon": protocol["fmcr_forecast_horizon"],
+        "anchor_strength": protocol["anchor_strength"],
+        "dapr_huber_delta": protocol["dapr_huber_delta"],
+        "mir_lookahead_steps": protocol["mir_lookahead_steps"],
         "cpmr_rule": ("min_current_projected_one_refresh_interval_v1"
                       if args.method == "cpmr" else None),
+        "dapr_rule": ("lowest_margin_directional_peak_token_anchor_v1"
+                      if args.method == "dapr" else
+                      "lowest_margin_centered_directional_peak_token_anchor_v1"
+                      if args.method == "dapr_c" else None),
+        "mir_dpo_rule": ("one_incoming_step_dpo_loss_increase_v1"
+                         if args.method == "mir_dpo" else None),
+        "copr_adapted_rule": ("lowest_margin_peak_pair_distribution_mse_v1"
+                              if args.method == "copr_adapted" else None),
     }
     settings["stage1_compatibility_sha256"] = stage1_compatibility_sha256(settings)
     current_info = run_info(ROOT)
@@ -236,6 +260,21 @@ def main():
         saved_settings["reference_cache_canary"] = canary
         save_json_atomic(saved_settings, existing_settings)
         print("Reference cache canary passed:", canary)
+    anchors = {} if args.method in mfr_dpo.ANCHOR_METHODS else None
+    if args.method in mfr_dpo.ANCHOR_METHODS and len(buffer):
+        anchor_path = Path(previous_adapter) / "preference_anchors.npz" if previous_adapter else None
+        if anchor_path is not None and anchor_path.exists():
+            anchors = mfr_dpo.load_preference_anchors(anchor_path)
+            missing = set(buffer.rows()["id"]) - set(anchors)
+            if missing:
+                raise ValueError(f"saved peak anchors are missing buffer pairs: {sorted(missing)[:3]}")
+            print(f"Loaded {len(anchors)} peak preference anchors.", flush=True)
+        else:
+            print("Capturing peak preference anchors from the starting checkpoint...", flush=True)
+            anchors = mfr_dpo.score_preference_anchors(
+                model, tokenizer, buffer.rows(), max_tokens=protocol["max_tokens"],
+                desc="initial peak token anchors",
+            )
     run_meta = {"run_name": run_name, "order_id": args.order, "method": args.method, "seed": args.seed,
                 "protocol_version": protocol["protocol_version"], "data_version": protocol["data_version"]}
     if first_stage == 1:
@@ -257,6 +296,9 @@ def main():
             reference_cache=reference_cache,
             fmcr_velocity_decay=protocol["fmcr_velocity_decay"],
             fmcr_forecast_horizon=protocol["fmcr_forecast_horizon"],
+            anchors=anchors, anchor_strength=protocol["anchor_strength"],
+            huber_delta=protocol["dapr_huber_delta"],
+            mir_lookahead_steps=protocol["mir_lookahead_steps"],
         )
         model.save_pretrained(stage_dir)
         print(f"Stage {stage}/{n_stages} training saved; scoring validation sets...", flush=True)
@@ -270,7 +312,7 @@ def main():
         if stage < len(order):
             buffer = update_buffer(
                 model, tokenizer, buffer, stage, dataset, splits[dataset]["train"], stage_dir,
-                protocol, reference_cache, args.method,
+                protocol, reference_cache, args.method, anchors=anchors,
             )
 
     expected = [run_dir / "settings.json", run_dir / "results.csv"] + [
@@ -278,6 +320,10 @@ def main():
     ]
     if args.stage1_from:
         expected = [path for path in expected if "stage1_" not in str(path)]
+    if args.method in mfr_dpo.ANCHOR_METHODS and n_stages > 1:
+        expected.append(
+            run_dir / f"stage{n_stages - 1}_{order[n_stages - 2]}" / "preference_anchors.npz"
+        )
     mark_run_complete(run_dir, expected)
     print(results.tail(9).to_string(index=False))
     print(f"Complete: {run_dir}")
