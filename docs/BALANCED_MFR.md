@@ -151,7 +151,7 @@ for order in 1 2 3 4; do
 done
 ```
 
-The six completed methods do not need to be rerun if the common data, model, training, scoring, and replay budgets are
+The seven completed methods do not need to be rerun if the common data, model, training, scoring, and replay budgets are
 unchanged and Stage-1 compatibility is verified.
 
 ## How to interpret the result

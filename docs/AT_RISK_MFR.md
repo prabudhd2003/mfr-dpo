@@ -122,7 +122,7 @@ Add tests proving that:
 - an old Stage-1 buffer without policy margins is scored before the first At-Risk replay selection;
 - no At-Risk replay plan can be created while required current policy margins are missing;
 - `needs_refresh("mfr_at_risk")` is true;
-- the six completed methods are unchanged.
+- the seven completed methods are unchanged.
 
 Update `tests/test_budget.py`, `tests/test_replay.py`, `tests/test_carc.py`, and `tests/test_protocol.py` as needed.
 
@@ -132,7 +132,7 @@ Update `tests/test_budget.py`, `tests/test_replay.py`, `tests/test_carc.py`, and
 - Include it in all full-grid tables, plots, paired intervals, and runtime comparisons.
 - Report how many selected replay slots came from the failure tier.
 - Report the number of unique selected pairs and allocation by old behavior.
-- Compare directly with Balanced MFR, original MFR, lowest margin, and equal-budget random.
+- Compare directly with Balanced MFR, original MFR, Lowest Margin, CPMR, and equal-budget random.
 
 ## Stage-1 compatibility
 
@@ -171,7 +171,7 @@ for order in 1 2 3 4; do
 done
 ```
 
-The six completed methods do not need to be rerun if their common protocol is unchanged and compatibility checks
+The seven completed methods do not need to be rerun if their common protocol is unchanged and compatibility checks
 pass.
 
 ## How to interpret the result

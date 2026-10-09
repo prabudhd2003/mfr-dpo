@@ -1,6 +1,6 @@
 # Method Development and Final Steps
 
-## 1. Run Counterfactual Projected-Margin Replay
+## 1. Completed method: Counterfactual Projected-Margin Replay
 
 CPMR is implemented as a preference-specific, interval-level interference method. At each replay refresh it:
 
@@ -25,13 +25,32 @@ worst-present-or-projected rule that contains Lowest Margin as the no-interferen
 is the closest published continual-preference context, but it uses policy regularization rather than this retrieval
 rule. Any novelty claim must say **“to our knowledge”** and be checked again before submission.
 
-Run all four orders and both seeds with the commands in `docs/CARC.md`. The decisive comparisons are CPMR versus
-Lowest Margin and CPMR versus Random 10%. No result is guaranteed; a negative result remains an informative
-ablation and must not be deleted from the experiment record.
+CPMR has now been run for all four orders and both seeds. The completed validation result is:
+
+| Method | Average retention change | Final current-task score | Final three-behavior average | Runtime |
+|---|---:|---:|---:|---:|
+| Random 10% | -5.50 | 73.62 | 71.71 | 24.28 min |
+| Original MFR | -4.88 | 73.75 | 71.98 | 28.28 min |
+| Lowest Margin | -4.47 | 74.31 | 72.56 | 28.59 min |
+| CPMR | **-4.28** | **74.56** | **72.85** | 48.75 min |
+
+CPMR has the best aggregate retention and final-average point estimates. Against equal-budget Random 10%, it
+improved retention by 1.22 points with a paired 95% interval of `[0.50, 1.94]`, final-task accuracy by 0.94 points
+with an interval of `[0.31, 1.56]`, and final average by 1.15 points with an interval of `[0.71, 1.56]`. These are
+the strongest completed comparisons because every interval excludes zero.
+
+Against Lowest Margin, CPMR improved retention by 0.19 points, final-task accuracy by 0.25 points, and final average
+by 0.29 points. The respective intervals `[-0.56, 0.94]`, `[-0.12, 0.56]`, and `[-0.08, 0.69]` include zero.
+Therefore CPMR beats Lowest Margin descriptively, but the current two-seed grid does not show a reliable difference.
+
+Mechanistically, CPMR and Lowest Margin have a mean distinct-pair Jaccard overlap of 0.55 and chance-adjusted overlap
+of 0.67. CPMR and Random 10% overlap by only 0.04. CPMR therefore often agrees with the current-difficulty baseline
+while making a clearly targeted, non-random modification. The main drawback is computation: its reversible
+lookahead raises mean runtime by about 20 minutes relative to Lowest Margin.
 
 ## 2. Finish Balanced MFR and At-Risk MFR
 
-After CPMR, implement, test, and run both methods for all four orders and both seeds.
+Next, implement, test, and run both methods for all four orders and both seeds.
 
 ## 3. Verify the run grid
 
@@ -49,7 +68,8 @@ Do not move to the locked test if any cell is missing or incompatible.
 
 ## 4. Extend the validation analysis
 
-Run Notebook 07 once over the full grid. Add Balanced MFR and At-Risk MFR to:
+Notebook 07 already includes CPMR throughout the full grid. After Balanced MFR and At-Risk MFR are complete, add
+them to:
 
 - average retention change;
 - final current-task accuracy;
@@ -62,8 +82,9 @@ Run Notebook 07 once over the full grid. Add Balanced MFR and At-Risk MFR to:
 - runtime and scoring overhead;
 - replay allocation, unique selected pairs, and repeat concentration.
 
-Include CPMR's projected margins, predicted drops, observed next-refresh margins, selection overhead, and overlap
-with Lowest Margin. Its `cpmr_refresh_*.csv` files preserve the full candidate ranking inputs at every refresh.
+Notebook 07 now reads CPMR's projected margins, predicted drops, observed next-refresh margins, selection overhead,
+and overlap with Lowest Margin. Its `cpmr_refresh_*.csv` files preserve the full candidate ranking inputs at every
+refresh.
 
 The key comparisons are:
 
@@ -75,7 +96,8 @@ The key comparisons are:
 
 ## 5. Perform mechanism analysis
 
-For each targeted method, report:
+Notebook 07 now reports selection overlap, repeat concentration, behavior allocation, interval-to-interval
+stability, and CPMR projection diagnostics. Extend the same analysis to each remaining targeted method and report:
 
 - overlap between the pairs selected by MFR, Balanced MFR, At-Risk MFR, CPMR, and lowest margin;
 - selected pairs' peak relative margin, current relative margin, historical drop, and current policy margin;
@@ -143,9 +165,10 @@ zero. It did, however, improve final-task accuracy by 1.12 points and the final 
 excluded zero. The correct interpretation is that this forecasting rule favored plasticity and new-task learning,
 not that it solved retention better.
 
-FMCR remains a useful ablation. It shows that anticipating a short-horizon boundary crossing is not automatically
-more effective than reacting to current difficulty. The report should include this result, but original MFR remains
-the main historical-forgetting method and Lowest Margin remains the baseline to beat.
+FMCR remains a useful ablation. It shows that extrapolating a short-horizon margin trajectory is not automatically
+more effective than reacting to current difficulty. The report should include this result. CPMR then supplies the
+positive forecasting result: simulating the actual upcoming DPO updates works substantially better than
+extrapolating past score movement.
 
 Each completed FMCR stage saved `fmcr_refresh_*.csv` snapshots for the full buffer. Its replay log records the
 selected pair's tier, current state, forecast, next observed state when available, forecast correctness, and
@@ -164,8 +187,9 @@ the careful wording **“to our knowledge”** and include a complete related-wo
 
 ## 8. Confirm on unseen seeds
 
-Seeds 0 and 1 have been used for development. After selecting the final method, add unseen seeds such as 2, 3, and 4
-to the protocol and run a confirmation grid. At minimum include:
+Seeds 0 and 1 have been used for development. After the remaining variants are evaluated and the final method is
+selected, add unseen seeds such as 2, 3, and 4 to the protocol and run a confirmation grid. CPMR is the current
+provisional winner. At minimum include:
 
 - no replay;
 - Random 10%;
@@ -219,17 +243,20 @@ The final report should clearly separate:
 - positive results from limitations or negative findings.
 
 A defensible final contribution is a controlled study of which preference pairs should be replayed during continual
-DPO. If an MFR variant wins, explain which signal made it work. If lowest margin remains strongest, the honest and
-useful finding is that current difficulty is more effective than historical decline under this setup.
+DPO. The current evidence supports a progression from historical forgetting, to present difficulty, to
+counterfactual interference from the actual upcoming updates. CPMR is the strongest aggregate method so far, but
+its advantage over Lowest Margin must be confirmed on unseen seeds and the locked test before it is presented as a
+reliable win.
 
 ## Completion checklist
 
 - [ ] Balanced MFR implemented, tested, and run in all eight cells
 - [ ] At-Risk MFR implemented, tested, and run in all eight cells
 - [x] CPMR implemented and tested
-- [ ] CPMR run and analyzed in all eight cells
+- [x] CPMR run and analyzed in all eight cells
 - [x] FMCR run and analyzed in all eight cells
-- [ ] Full validation analysis and mechanism analysis complete
+- [x] Current seven-method validation and CPMR mechanism analysis complete
+- [ ] Balanced MFR and At-Risk MFR added to the full analysis
 - [ ] Final method and statistical plan frozen
 - [ ] Unseen-seed confirmation complete
 - [ ] Locked test run once

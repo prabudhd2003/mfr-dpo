@@ -23,11 +23,11 @@ learned.
 - Version 2 of the data was cleaned, deduplicated across all datasets and splits, length-filtered, hashed, and frozen.
 - The CARC training pipeline, reference cache, resume logic, Stage-1 reuse, progress logs, replay logs, and automated
   tests are implemented.
-- All six completed methods were run for four task orders and two seeds on NVIDIA L40S GPUs: **48 completed runs**.
-- Notebook 07 reports the complete validation grid, paired uncertainty, per-dataset forgetting, final scores, and
-  runtime.
+- All seven methods were run for four task orders and two seeds on NVIDIA L40S GPUs: **56 completed runs**.
+- Notebook 07 reports the complete validation grid, paired uncertainty, per-dataset forgetting, replay-selection
+  overlap, concentration, final scores, and runtime.
 
-The six completed methods are:
+The seven completed methods are:
 
 | Method | Meaning |
 |---|---|
@@ -37,15 +37,16 @@ The six completed methods are:
 | Random 14.3% | Use more random replay to test whether budget alone explains the result. |
 | Lowest margin | Replay pairs with the lowest current reference-relative margin. |
 | FMCR 10% | Forecast which pairs may cross a preference-failure boundary before the next refresh. |
+| CPMR 10% | Virtually train on the upcoming new-task interval and replay pairs with the lowest present-or-projected margin. |
 
-Forecasted Margin-Crossing Replay (FMCR) is a completed ablation, not the main winning method. Balanced MFR and
-At-Risk MFR are planned separately and are **not implemented or evaluated yet**.
+Forecasted Margin-Crossing Replay (FMCR) is a completed forecasting ablation. **Counterfactual Projected-Margin
+Replay (CPMR)** is the strongest method by aggregate point estimate. CPMR briefly simulates the exact upcoming
+new-task interval without replay, measures each old pair before and after that reversible lookahead, and replays the
+pairs with the lowest worst-case margin across the present and projected states. It uses the same 10% replay budget
+and 0.75 per-behavior cap as Lowest Margin. The virtual pass restores the adapter, optimizer, learning-rate schedule,
+and random state before real training continues.
 
-**Counterfactual Projected-Margin Replay (CPMR)** is now implemented and tested, but has not yet been run. CPMR
-briefly simulates the next interval of new-task updates without replay, measures each old pair before and after that
-reversible lookahead, and replays the pairs with the lowest worst-case margin across the present and projected
-states. It uses the same 10% replay budget and 0.75 per-behavior cap as Lowest Margin. The virtual pass restores the
-adapter, optimizer, learning-rate schedule, and random state before real training continues.
+Balanced MFR and At-Risk MFR are planned controlled ablations and are **not implemented or evaluated yet**.
 
 ## Data
 
@@ -95,8 +96,9 @@ between the point when it was learned and the end of training. Less negative is 
 | Random 10% | -5.50 | about **31%** | 71.71 | +2.44 retention, +0.94 final |
 | MFR 10% | -4.88 | about **39%** | 71.98 | +3.06 retention, +1.21 final |
 | Random 14.3% | -5.47 | about **31%** | 71.73 | +2.47 retention, +0.96 final |
-| Lowest margin | **-4.47** | about **44%** | **72.56** | **+3.47 retention, +1.79 final** |
+| Lowest margin | -4.47 | about **44%** | 72.56 | +3.47 retention, +1.79 final |
 | FMCR 10% | -5.44 | about **31%** | 72.21 | +2.50 retention, +1.44 final |
+| CPMR 10% | **-4.28** | about **46%** | **72.85** | **+3.66 retention, +2.08 final** |
 
 “Forgetting prevented” expresses the improvement relative to the 7.94-point forgetting observed without replay.
 For example, MFR recovers 3.06 of those 7.94 points, so it prevents approximately `3.06 / 7.94 = 39%` of the
@@ -107,12 +109,15 @@ In simple terms:
 - Random 10% prevents approximately **31% of the forgetting**.
 - MFR 10% prevents approximately **39% of the forgetting**.
 - Random 14.3% also prevents approximately **31% of the forgetting** despite using more replay examples.
-- Lowest Margin prevents approximately **44% of the forgetting**, the strongest result so far.
+- Lowest Margin prevents approximately **44% of the forgetting**.
 - FMCR prevents approximately **31% of the forgetting** and favors final-task learning more than retention.
+- CPMR prevents approximately **46% of the forgetting**, the strongest aggregate point estimate.
 
 For additional context, final current-task accuracy was 74.81 for No Replay, 73.62 for Random 10%, 73.75 for MFR,
-73.88 for Random 14.3%, 74.31 for Lowest Margin, and 74.75 for FMCR. Average runtime per run ranged from 22.48
-minutes for No Replay to 29.26 minutes for FMCR; targeted methods are slower because they score replay candidates.
+73.88 for Random 14.3%, 74.31 for Lowest Margin, 74.75 for FMCR, and 74.56 for CPMR. CPMR therefore recovered
+the most retention while remaining only 0.25 points below No Replay on the final task. Average runtime was 22.48
+minutes for No Replay, 28.59 for Lowest Margin, and 48.75 for CPMR. CPMR's reversible lookahead makes it the most
+computationally expensive method.
 
 ### Is this size of improvement normal?
 
@@ -137,7 +142,7 @@ show how replay improvements are normally interpreted.
   alone.
 
 Our results follow the same general pattern: replay changes final average accuracy by roughly 1–2 points, but it
-prevents 31–44% of the forgetting measured without replay. MFR's 0.62-point retention advantage over equal-budget
+prevents 31–46% of the forgetting measured without replay. MFR's 0.62-point retention advantage over equal-budget
 Random 10% is modest, but its paired 95% bootstrap interval, `[0.22, 1.09]`, excludes zero. This makes the retention
 result credible within the current experiment grid, although generation and human evaluation are still needed to
 show whether the difference is noticeable in model responses.
@@ -151,19 +156,26 @@ What these results support:
   interval was `[0.22, 1.09]`, while its final-task difference was small and uncertain.
 - **MFR also improves on higher-budget random replay.** It retained 0.59 points more and had a 0.25-point higher
   final average while using one-third fewer replay examples. MFR is slower because it must rescore the buffer.
-- **Lowest margin is currently the strongest overall method.** It has the best average retention and final
-  three-behavior score. Its final average is 0.58 points above MFR, with a paired interval that excludes zero. FMCR
-  has a slightly higher final current-task score, but retains earlier behaviors less effectively.
+- **Lowest Margin is a strong baseline, but CPMR has the best aggregate point estimates.** CPMR retained 0.19 points
+  more, scored 0.25 points higher on the final task, and finished 0.29 points higher overall. These three paired
+  intervals include zero, so the current two-seed grid does not establish that CPMR reliably beats Lowest Margin.
 - **The original MFR idea is promising but is not the final winner.** Historical margin decline contains useful
   information, but the current results show that present difficulty is a very strong replay signal.
 - **FMCR is a useful forecasting ablation with a mixed result.** It did not improve retention over Random 10%, but
   it improved final-task accuracy by 1.12 points and the final three-behavior average by 0.50 points. Compared with
   Lowest Margin, FMCR retained 0.97 points less and finished 0.35 points lower overall. Forecasting favored new-task
   learning more than retention and did not replace the simpler current-difficulty signal.
+- **CPMR is the strongest completed forecasting method.** Against equal-budget Random 10%, it improved retention by
+  1.22 points, final-task accuracy by 0.94 points, and the final three-behavior average by 1.15 points; all three
+  paired 95% intervals exclude zero. It also beat Random 14.3% on retention and final average while using one-third
+  fewer replay examples.
+- **CPMR is related to, but not identical to, Lowest Margin.** Their mean distinct-pair Jaccard overlap is 0.55 and
+  chance-adjusted overlap is 0.67. CPMR's overlap with Random 10% is only 0.04, showing that its selections are
+  targeted rather than effectively random.
 
 These are validation results from two seeds, not final test results. They support a controlled project conclusion,
-but not a broad claim that MFR is universally better. Balanced MFR and At-Risk MFR will separately test behavior
-allocation and actual current preference failure.
+but not a broad claim that CPMR is universally better. Balanced MFR and At-Risk MFR will separately test behavior
+allocation and actual current preference failure. Unseen seeds must confirm the CPMR result before the locked test.
 
 ## How the results fit together
 
@@ -173,14 +185,14 @@ The project is not simply a contest to make MFR win. The report tells a sequence
 2. A fixed amount of replay substantially reduces that forgetting.
 3. Historical margin decline is useful: MFR beats equal-budget Random 10% on retention and also beats higher-budget
    random replay while using fewer examples.
-4. Present difficulty is even stronger in this setup: Lowest Margin currently gives the best retention and final
-   balance.
+4. Present difficulty is even stronger than historical decline in this setup: Lowest Margin beats original MFR.
 5. Forecasting is not automatically better. FMCR improves current-task learning and the final average relative to
    random replay, but its retention is similar to random and worse than Lowest Margin.
-6. CPMR is the next direct test: can Lowest Margin's present-risk signal be improved by adding a reversible forecast
-   of interference from the actual upcoming new-task batches?
-7. Balanced MFR and At-Risk MFR are controlled ablations that will test whether allocation and actual policy failure
-   explain the remaining gap.
+6. A forecast grounded in the actual upcoming updates works better: CPMR combines current difficulty with a
+   reversible interval-level simulation and achieves the best aggregate retention and final average. It clearly
+   beats random replay, while its small advantage over Lowest Margin remains uncertain.
+7. Balanced MFR and At-Risk MFR are remaining controlled ablations that will test whether allocation and actual
+   policy failure explain the remaining gap.
 
 This supports a broader contribution: a controlled study of **what an LLM should rehearse during continual
 preference tuning**, including positive and negative results, rather than an unsupported claim that one heuristic is
@@ -195,11 +207,11 @@ redirecting harmful requests. This makes the three behaviors related, but not in
 
 The measured forgetting reflects that difference:
 
-| Earlier behavior | No replay | Random 10% | MFR 10% | Lowest margin | FMCR 10% |
-|---|---:|---:|---:|---:|---:|
-| Helpful (6 cells) | -6.25 | -4.50 | -4.83 | -4.42 | **-4.17** |
-| Safe (6 cells) | -13.25 | -8.75 | -7.33 | **-6.67** | -8.58 |
-| Quality (4 cells) | -2.50 | -2.12 | **-1.25** | **-1.25** | -2.62 |
+| Earlier behavior | No replay | Random 10% | MFR 10% | Lowest margin | FMCR 10% | CPMR 10% |
+|---|---:|---:|---:|---:|---:|---:|
+| Helpful (6 cells) | -6.25 | -4.50 | -4.83 | -4.42 | -4.17 | **-3.92** |
+| Safe (6 cells) | -13.25 | -8.75 | -7.33 | **-6.67** | -8.58 | -7.00 |
+| Quality (4 cells) | -2.50 | -2.12 | -1.25 | -1.25 | -2.62 | **-0.75** |
 
 Safety is the most fragile behavior and Quality is the most stable. A plausible explanation is that later helpfulness
 or quality tuning rewards broadly useful responses and can weaken refusal behavior, while helpfulness and quality
@@ -208,12 +220,12 @@ generation and error analyses must inspect actual responses.
 
 Average retention also changes by order:
 
-| Order | Sequence | No replay | MFR 10% | Lowest margin | FMCR 10% |
-|---:|---|---:|---:|---:|---:|
-| 1 | Helpful → Safe → Quality | -9.75 | -5.38 | **-5.12** | -5.75 |
-| 2 | Safe → Helpful → Quality | -13.00 | -9.25 | **-8.50** | -8.75 |
-| 3 | Quality → Helpful → Safe | -4.38 | -1.50 | **-1.25** | -3.12 |
-| 4 | Quality → Safe → Helpful | -4.62 | -3.38 | **-3.00** | -4.12 |
+| Order | Sequence | No replay | MFR 10% | Lowest margin | FMCR 10% | CPMR 10% |
+|---:|---|---:|---:|---:|---:|---:|
+| 1 | Helpful → Safe → Quality | -9.75 | -5.38 | **-5.12** | -5.75 | -6.25 |
+| 2 | Safe → Helpful → Quality | -13.00 | -9.25 | -8.50 | -8.75 | **-7.25** |
+| 3 | Quality → Helpful → Safe | -4.38 | -1.50 | -1.25 | -3.12 | **-1.00** |
+| 4 | Quality → Safe → Helpful | -4.62 | -3.38 | -3.00 | -4.12 | **-2.62** |
 
 Order 2 is hardest because Safety is learned first, is the most fragile behavior, and must survive two later stages.
 Orders 3 and 4 look easier partly because stable Quality is placed earlier while either Safety or Helpfulness is last
@@ -239,7 +251,7 @@ Start with:
 - [`docs/CARC.md`](docs/CARC.md) for exact CARC setup, submission, monitoring, and analysis commands.
 - [`docs/BALANCED_MFR.md`](docs/BALANCED_MFR.md) for the Balanced MFR definition and implementation checklist.
 - [`docs/AT_RISK_MFR.md`](docs/AT_RISK_MFR.md) for the At-Risk MFR definition and implementation checklist.
-- [`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md) for CPMR's definition and the remaining evaluation plan.
+- [`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md) for CPMR's completed result and the remaining evaluation plan.
 
 The active notebooks are:
 

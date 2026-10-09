@@ -137,30 +137,13 @@ One group job runs the requested methods sequentially for one order and seed. Th
 | 3 | Quality → Helpful → Safe |
 | 4 | Quality → Safe → Helpful |
 
-The six-method grid—No Replay, Random 10%, original MFR, Random 14.3%, Lowest Margin, and FMCR—is complete for all
-four orders and both seeds. Do not submit those completed combinations again. Their checkpoints and results are
-under `$MFR_OUTPUT_DIR/runs`.
+The seven-method grid—No Replay, Random 10%, original MFR, Random 14.3%, Lowest Margin, FMCR, and CPMR—is complete
+for all four orders and both seeds: 56 runs in total. Do not submit those completed combinations again. Their
+checkpoints and results are under `$MFR_OUTPUT_DIR/runs`.
 
-CPMR is implemented but not yet evaluated. After pulling and testing the commit that contains CPMR, submit only this
-method across all eight cells:
-
-```bash
-for order in 1 2 3 4; do
-  for seed in 0 1; do
-    python scripts/submit_carc.py group \
-      --output-dir "$MFR_OUTPUT_DIR" \
-      --account xiangren_1987 \
-      --gpu l40s \
-      --time 04:00:00 \
-      --order "$order" \
-      --seed "$seed" \
-      --methods cpmr
-  done
-done
-```
-
-CPMR performs reversible virtual training, so it will be slower than Lowest Margin. Four hours per single CPMR run
-is deliberately conservative. Submit each order–seed cell only once.
+CPMR performs reversible virtual training and averaged 48.75 minutes per run, compared with 28.59 minutes for
+Lowest Margin. It should remain available as a completed baseline, but it does not need to be resubmitted for seeds
+0 and 1.
 
 After Balanced MFR is implemented and configured as `mfr_balanced`, run only that new method across all eight cells:
 
@@ -196,7 +179,7 @@ for order in 1 2 3 4; do
 done
 ```
 
-The existing completed `none` run supplies the matching Stage-1 checkpoint. Do not rerun the six completed methods
+The existing completed `none` run supplies the matching Stage-1 checkpoint. Do not rerun the seven completed methods
 just because a new replay method is added. The runner now checks a separate Stage-1 compatibility fingerprint, so a
 replay-only extension can reuse the completed checkpoint while a real Stage-1 training change is still rejected.
 
