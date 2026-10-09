@@ -1,8 +1,39 @@
-# Next Steps After Balanced MFR and At-Risk MFR
+# Method Development and Final Steps
 
-This document begins after both methods are implemented, tested, and run for all four orders and both seeds.
+## 1. Run Counterfactual Projected-Margin Replay
 
-## 1. Verify the run grid
+CPMR is implemented as a preference-specific, interval-level interference method. At each replay refresh it:
+
+1. scores every old buffer pair's current reference-relative DPO margin;
+2. snapshots all trainable adapter parameters, AdamW state, learning-rate scheduler state, and CPU/GPU random state;
+3. virtually trains on the exact upcoming shuffled new-task batches with no replay;
+4. scores the old buffer again to obtain each projected margin;
+5. restores the snapshot exactly, so the virtual pass cannot alter real training;
+6. defines `worst_case_margin = min(current_margin, projected_margin)`;
+7. ranks lower worst-case margins first, with larger predicted drop and historical drop as tie-breakers;
+8. applies the same 10% budget and 0.75 per-behavior cap as the existing targeted methods.
+
+Using the worse of the present and projected states is deliberate. It preserves Lowest Margin's protection of pairs
+that are already weak while allowing an upcoming update to reveal additional endangered pairs. There is no fitted
+mixing weight or failure threshold.
+
+The closest conceptual predecessor is [Maximally Interfered Retrieval (MIR)](https://proceedings.neurips.cc/paper/2019/hash/15825aee15eb335cc13f9b559f166ee8-Abstract.html),
+which retrieves memories whose loss is harmed by a foreseen update. CPMR should not be described as the first use of
+a virtual update in continual learning. Its proposed contribution is preference-specific: an exact multi-step DPO
+lookahead over one refresh interval, reference-relative preference margins rather than classification loss, and a
+worst-present-or-projected rule that contains Lowest Margin as the no-interference case. [COPR](https://aclanthology.org/2025.findings-acl.281/)
+is the closest published continual-preference context, but it uses policy regularization rather than this retrieval
+rule. Any novelty claim must say **“to our knowledge”** and be checked again before submission.
+
+Run all four orders and both seeds with the commands in `docs/CARC.md`. The decisive comparisons are CPMR versus
+Lowest Margin and CPMR versus Random 10%. No result is guaranteed; a negative result remains an informative
+ablation and must not be deleted from the experiment record.
+
+## 2. Finish Balanced MFR and At-Risk MFR
+
+After CPMR, implement, test, and run both methods for all four orders and both seeds.
+
+## 3. Verify the run grid
 
 There should be eight completed runs for each new method:
 
@@ -16,7 +47,7 @@ the same data manifest, model revision, common hyperparameters, order, seed, and
 
 Do not move to the locked test if any cell is missing or incompatible.
 
-## 2. Extend the validation analysis
+## 4. Extend the validation analysis
 
 Run Notebook 07 once over the full grid. Add Balanced MFR and At-Risk MFR to:
 
@@ -31,6 +62,9 @@ Run Notebook 07 once over the full grid. Add Balanced MFR and At-Risk MFR to:
 - runtime and scoring overhead;
 - replay allocation, unique selected pairs, and repeat concentration.
 
+Include CPMR's projected margins, predicted drops, observed next-refresh margins, selection overhead, and overlap
+with Lowest Margin. Its `cpmr_refresh_*.csv` files preserve the full candidate ranking inputs at every refresh.
+
 The key comparisons are:
 
 1. Balanced MFR vs original MFR — does equal behavior allocation help?
@@ -39,11 +73,11 @@ The key comparisons are:
 4. Best MFR variant vs Random 10% — does targeted replay beat an equal-budget random baseline?
 5. Best MFR variant vs Random 14.3% — is targeting more data-efficient than extra random replay?
 
-## 3. Perform mechanism analysis
+## 5. Perform mechanism analysis
 
 For each targeted method, report:
 
-- overlap between the pairs selected by MFR, Balanced MFR, At-Risk MFR, and lowest margin;
+- overlap between the pairs selected by MFR, Balanced MFR, At-Risk MFR, CPMR, and lowest margin;
 - selected pairs' peak relative margin, current relative margin, historical drop, and current policy margin;
 - replay slots and unique pairs per old behavior;
 - how often each pair is repeated;
@@ -53,7 +87,7 @@ For each targeted method, report:
 
 This analysis explains *why* a method wins or loses and is necessary for a meaningful report.
 
-## 4. Freeze the development decision
+## 6. Freeze the development decision
 
 Write the selection rule before looking at the locked test. A reasonable rule is:
 
@@ -66,7 +100,7 @@ Write the selection rule before looking at the locked test. A reasonable rule is
 Record the chosen method, checkpoint rule, metrics, and exact Git commit. After this point, do not tune the method on
 locked-test outcomes.
 
-## 5. Completed ablation: Forecasted Margin-Crossing Replay
+## 7. Completed ablation: Forecasted Margin-Crossing Replay
 
 **Forecasted Margin-Crossing Replay (FMCR)** was evaluated in all four orders and both seeds. It replays pairs
 predicted to cross into failure at the next refresh rather than waiting until they have already failed.
@@ -128,7 +162,7 @@ trajectory of two preference-pair margins and replaying before a meaningful pref
 a virtual gradient update. No exact prior method was found in the literature search, but the paper should still use
 the careful wording **“to our knowledge”** and include a complete related-work review.
 
-## 6. Confirm on unseen seeds
+## 8. Confirm on unseen seeds
 
 Seeds 0 and 1 have been used for development. After selecting the final method, add unseen seeds such as 2, 3, and 4
 to the protocol and run a confirmation grid. At minimum include:
@@ -142,7 +176,7 @@ to the protocol and run a confirmation grid. At minimum include:
 Run all four orders. Do not select a different method after seeing the confirmation results. More independent seeds
 are more valuable now than increasing the current 2,000 training pairs.
 
-## 7. Run the locked test once
+## 9. Run the locked test once
 
 After the method and statistical plan are frozen:
 
@@ -154,7 +188,7 @@ After the method and statistical plan are frozen:
 
 The locked test is for final confirmation, not method development.
 
-## 8. Evaluate generated responses
+## 10. Evaluate generated responses
 
 Preference-pair accuracy does not prove that generated answers are helpful, safe, or high quality. Generate responses
 from the final checkpoints using the frozen deterministic generation settings, then evaluate:
@@ -167,13 +201,13 @@ from the final checkpoints using the frozen deterministic generation settings, t
 
 Use the same prompt sets and generation settings for every compared method.
 
-## 9. Conduct blinded human evaluation
+## 11. Conduct blinded human evaluation
 
 Create a small, balanced prompt sample across all three behaviors. Hide method names, randomize response order, and
 ask reviewers to judge the relevant criteria. Record the rubric, reviewer agreement, ties, and uncertainty. Human
 evaluation should support—not replace—the automatic and preference-pair metrics.
 
-## 10. Complete the report and presentation
+## 12. Complete the report and presentation
 
 The final report should clearly separate:
 
@@ -192,6 +226,8 @@ useful finding is that current difficulty is more effective than historical decl
 
 - [ ] Balanced MFR implemented, tested, and run in all eight cells
 - [ ] At-Risk MFR implemented, tested, and run in all eight cells
+- [x] CPMR implemented and tested
+- [ ] CPMR run and analyzed in all eight cells
 - [x] FMCR run and analyzed in all eight cells
 - [ ] Full validation analysis and mechanism analysis complete
 - [ ] Final method and statistical plan frozen

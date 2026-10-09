@@ -7,6 +7,8 @@ def install():
         def __init__(self, params, lr=0.0): self.params, self.lr, self.steps = params, lr, 0
         def zero_grad(self): pass
         def step(self): self.steps += 1
+        def state_dict(self): return {"steps": self.steps}
+        def load_state_dict(self, state): self.steps = state["steps"]
     cuda = types.SimpleNamespace(is_available=lambda: False, is_bf16_supported=lambda: False,
                                  reset_peak_memory_stats=lambda: None, max_memory_allocated=lambda: 0,
                                  manual_seed_all=lambda s: None, get_device_name=lambda i: "fake")
@@ -16,6 +18,8 @@ def install():
                                      functional=types.ModuleType("torch.nn.functional"))
     torch.cuda = cuda
     torch.manual_seed = lambda s: None
+    torch.get_rng_state = lambda: "cpu-rng"
+    torch.set_rng_state = lambda state: None
     class _NoGrad(contextlib.ContextDecorator):      # usable as both `with torch.no_grad():` and `@torch.no_grad()`
         def __enter__(self): return self
         def __exit__(self, *exc): return False
@@ -29,9 +33,14 @@ def install():
     sys.modules["peft"] = types.SimpleNamespace(LoraConfig=object, PeftModel=object,
                                                 get_peft_model=lambda *a, **k: None,
                                                 prepare_model_for_kbit_training=lambda *a, **k: None)
+    class _Scheduler:
+        def __init__(self): self.steps = 0
+        def step(self): self.steps += 1
+        def state_dict(self): return {"steps": self.steps}
+        def load_state_dict(self, state): self.steps = state["steps"]
     sys.modules["transformers"] = types.SimpleNamespace(
         AutoModelForCausalLM=object, AutoTokenizer=object, BitsAndBytesConfig=object,
-        get_linear_schedule_with_warmup=lambda opt, warm, total: types.SimpleNamespace(step=lambda: None))
+        get_linear_schedule_with_warmup=lambda opt, warm, total: _Scheduler())
     try:
         import tqdm  # noqa: F401
         import tqdm.auto  # noqa: F401

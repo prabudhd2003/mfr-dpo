@@ -14,6 +14,7 @@ The methods differ in which stored pairs fill the replay slots of each training 
     lowest_margin   the lowest current_margin (hard pairs, forgotten or not)
     mfr             the largest drop, peak_margin - current_margin (our method)
     fmcr            pairs forecast to cross a preference boundary before the next refresh
+    cpmr            the lowest projected margin after a counterfactual new-task update interval
 
 Everything here is CPU-only and fully seeded: which pairs enter the buffer depends on the run seed
 and the dataset, never on the method, so every method stores exactly the same candidate pairs.
@@ -24,18 +25,25 @@ import pandas as pd
 
 from mfr_utils import buffer_seed
 
-METHODS = ("none", "random", "random_high", "lowest_margin", "mfr", "fmcr")
-REFRESH_METHODS = ("lowest_margin", "mfr", "fmcr")
+METHODS = ("none", "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr")
+REFRESH_METHODS = ("lowest_margin", "mfr", "fmcr", "cpmr")
 FORECAST_COLUMNS = [
     "previous_margin", "margin_velocity",
     "current_policy_margin", "previous_policy_margin", "policy_velocity",
 ]
-EXTRA_COLUMNS = ["dataset", "peak_margin", "current_margin", *FORECAST_COLUMNS]
+COUNTERFACTUAL_COLUMNS = ["projected_margin", "predicted_drop"]
+EXTRA_COLUMNS = [
+    "dataset", "peak_margin", "current_margin", *FORECAST_COLUMNS, *COUNTERFACTUAL_COLUMNS,
+]
 PLAN_COLUMNS = ["id", "dataset", "selection_score", "selection_rank", "method"]
 FMCR_PLAN_COLUMNS = [
     *PLAN_COLUMNS, "risk_tier", "risk_label", "historical_drop",
     "current_margin", "current_policy_margin", "margin_velocity", "policy_velocity",
     "forecast_margin", "forecast_policy_margin", "time_to_crossing", "dataset_quota",
+]
+CPMR_PLAN_COLUMNS = [
+    *PLAN_COLUMNS, "current_margin", "projected_margin", "worst_case_margin",
+    "predicted_drop", "historical_drop",
 ]
 
 
@@ -92,6 +100,8 @@ class ReplayBuffer:
                 raise ValueError(f"policy margins missing for {missing} ...")
         new["previous_policy_margin"] = new["current_policy_margin"]
         new["policy_velocity"] = 0.0
+        new["projected_margin"] = new["current_margin"]
+        new["predicted_drop"] = 0.0
 
         self._rows = pd.concat([self._rows, new], ignore_index=True) if len(self._rows) else new
         self._rebalance()
@@ -177,6 +187,22 @@ class ReplayBuffer:
         self._rows["current_policy_margin"] = policy
         self._rows["policy_velocity"] = keep * old_policy_velocity + learn * (policy - old_policy)
 
+    def set_counterfactual_scores(self, current_margin, projected_margin):
+        """Store CPMR's present and counterfactual future margins.
+
+        Both inputs are Series indexed by pair id. ``predicted_drop`` is positive when training on
+        the upcoming new-task interval without replay is forecast to damage an old preference.
+        """
+        current = self._rows["id"].map(current_margin)
+        projected = self._rows["id"].map(projected_margin)
+        if current.isna().any() or projected.isna().any():
+            missing = self._rows.loc[current.isna() | projected.isna(), "id"].tolist()[:3]
+            raise ValueError(f"counterfactual scores missing for {missing} ...")
+        self._rows["previous_margin"] = self._rows["current_margin"].astype(float)
+        self._rows["current_margin"] = current.astype(float)
+        self._rows["projected_margin"] = projected.astype(float)
+        self._rows["predicted_drop"] = current.astype(float) - projected.astype(float)
+
     def forecast_ready(self):
         """Whether every buffered pair has the trajectory state required by FMCR."""
         return all(column in self._rows and not self._rows[column].isna().any()
@@ -211,6 +237,10 @@ class ReplayBuffer:
             buffer._rows["previous_policy_margin"] = buffer._rows["current_policy_margin"]
         if "policy_velocity" not in buffer._rows:
             buffer._rows["policy_velocity"] = 0.0
+        if "projected_margin" not in buffer._rows:
+            buffer._rows["projected_margin"] = buffer._rows["current_margin"]
+        if "predicted_drop" not in buffer._rows:
+            buffer._rows["predicted_drop"] = 0.0
         return buffer
 
 
@@ -238,7 +268,8 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
     if method not in METHODS:
         raise ValueError(f"unknown replay method {method!r}; expected one of {METHODS}")
     if method == "none" or buffer is None or len(buffer) == 0 or n_slots <= 0:
-        columns = FMCR_PLAN_COLUMNS if method == "fmcr" else PLAN_COLUMNS
+        columns = (FMCR_PLAN_COLUMNS if method == "fmcr" else
+                   CPMR_PLAN_COLUMNS if method == "cpmr" else PLAN_COLUMNS)
         return pd.DataFrame(columns=columns)
 
     rows = buffer.rows()
@@ -249,6 +280,8 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
             rows, n_slots, tiebreak, plan_index=int(plan_index),
             forecast_horizon=float(forecast_horizon),
         )
+    if method == "cpmr":
+        return _plan_cpmr(rows, n_slots, tiebreak, max_share_per_dataset)
 
     if method in ("random", "random_high"):
         score = tiebreak
@@ -271,6 +304,45 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
     selected = pd.DataFrame(repeats).reset_index(drop=True)
     selected["method"] = method
     return selected[PLAN_COLUMNS]
+
+
+def _plan_cpmr(rows, n_slots, tiebreak, max_share_per_dataset=None):
+    """Replay pairs with the weakest present-or-projected counterfactual margin.
+
+    The worse of the current and projected margins is the primary key. Therefore a forecast can add
+    future risk but cannot hide a pair that is already weak, and the rule reduces to Lowest Margin
+    when the upcoming interval is predicted to have no effect. Predicted interference and
+    historical forgetting are secondary keys. This avoids a weighted score and introduces no tuned
+    mixing coefficient.
+    """
+    missing = [column for column in COUNTERFACTUAL_COLUMNS if column not in rows]
+    if missing or rows[COUNTERFACTUAL_COLUMNS].isna().any().any():
+        raise ValueError(
+            "CPMR requires current and projected counterfactual margins; "
+            f"missing or incomplete columns: {missing or COUNTERFACTUAL_COLUMNS}"
+        )
+
+    work = rows.copy()
+    work["historical_drop"] = work["peak_margin"] - work["current_margin"]
+    work["worst_case_margin"] = np.minimum(
+        work["current_margin"], work["projected_margin"]
+    )
+    order = np.lexsort((
+        tiebreak,
+        -work["historical_drop"].to_numpy(),
+        -work["predicted_drop"].to_numpy(),
+        work["worst_case_margin"].to_numpy(),
+    ))
+    ranked = work.iloc[order].copy()
+    ranked["selection_score"] = -ranked["worst_case_margin"]
+    ranked["selection_rank"] = np.arange(1, len(ranked) + 1)
+    if max_share_per_dataset is not None:
+        ranked = _apply_cap(ranked, n_slots, max_share_per_dataset)
+
+    repeats = [ranked.iloc[i % len(ranked)].copy() for i in range(n_slots)]
+    selected = pd.DataFrame(repeats).reset_index(drop=True)
+    selected["method"] = "cpmr"
+    return selected[CPMR_PLAN_COLUMNS]
 
 
 def _plan_fmcr(rows, n_slots, tiebreak, plan_index=0, forecast_horizon=1.0):

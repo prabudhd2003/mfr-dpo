@@ -23,7 +23,7 @@ learned.
 - Version 2 of the data was cleaned, deduplicated across all datasets and splits, length-filtered, hashed, and frozen.
 - The CARC training pipeline, reference cache, resume logic, Stage-1 reuse, progress logs, replay logs, and automated
   tests are implemented.
-- All six current methods were run for four task orders and two seeds on NVIDIA L40S GPUs: **48 completed runs**.
+- All six completed methods were run for four task orders and two seeds on NVIDIA L40S GPUs: **48 completed runs**.
 - Notebook 07 reports the complete validation grid, paired uncertainty, per-dataset forgetting, final scores, and
   runtime.
 
@@ -40,6 +40,12 @@ The six completed methods are:
 
 Forecasted Margin-Crossing Replay (FMCR) is a completed ablation, not the main winning method. Balanced MFR and
 At-Risk MFR are planned separately and are **not implemented or evaluated yet**.
+
+**Counterfactual Projected-Margin Replay (CPMR)** is now implemented and tested, but has not yet been run. CPMR
+briefly simulates the next interval of new-task updates without replay, measures each old pair before and after that
+reversible lookahead, and replays the pairs with the lowest worst-case margin across the present and projected
+states. It uses the same 10% replay budget and 0.75 per-behavior cap as Lowest Margin. The virtual pass restores the
+adapter, optimizer, learning-rate schedule, and random state before real training continues.
 
 ## Data
 
@@ -171,7 +177,9 @@ The project is not simply a contest to make MFR win. The report tells a sequence
    balance.
 5. Forecasting is not automatically better. FMCR improves current-task learning and the final average relative to
    random replay, but its retention is similar to random and worse than Lowest Margin.
-6. Balanced MFR and At-Risk MFR are controlled ablations that will test whether allocation and actual policy failure
+6. CPMR is the next direct test: can Lowest Margin's present-risk signal be improved by adding a reversible forecast
+   of interference from the actual upcoming new-task batches?
+7. Balanced MFR and At-Risk MFR are controlled ablations that will test whether allocation and actual policy failure
    explain the remaining gap.
 
 This supports a broader contribution: a controlled study of **what an LLM should rehearse during continual
@@ -231,7 +239,7 @@ Start with:
 - [`docs/CARC.md`](docs/CARC.md) for exact CARC setup, submission, monitoring, and analysis commands.
 - [`docs/BALANCED_MFR.md`](docs/BALANCED_MFR.md) for the Balanced MFR definition and implementation checklist.
 - [`docs/AT_RISK_MFR.md`](docs/AT_RISK_MFR.md) for the At-Risk MFR definition and implementation checklist.
-- [`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md) for the work remaining after those two methods run.
+- [`docs/NEXT_STEPS.md`](docs/NEXT_STEPS.md) for CPMR's definition and the remaining evaluation plan.
 
 The active notebooks are:
 

@@ -187,7 +187,7 @@ def validate_resume_settings(settings, saved):
             "data_manifest_sha256", "model_name", "model_revision", "lr", "beta", "new_per_step",
             "old_per_step", "max_tokens", "buffer_size", "refreshes", "lora_r", "lora_alpha",
             "lora_dropout", "epochs", "micro_batch", "fmcr_velocity_decay",
-            "fmcr_forecast_horizon", "stage1_run_name", "scientific_code_sha256")
+            "fmcr_forecast_horizon", "cpmr_rule", "stage1_run_name", "scientific_code_sha256")
     mismatches = {key: (settings.get(key), saved.get(key))
                   for key in keys if settings.get(key) != saved.get(key)}
     if mismatches:

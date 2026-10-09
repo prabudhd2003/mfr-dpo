@@ -31,7 +31,8 @@ class FakeLoss:
 
 class FakeModel:
     def parameters(self): return []
-    def train(self): pass
+    training = True
+    def train(self, mode=True): self.training = mode
 
 
 @functools.lru_cache(maxsize=1)
@@ -114,7 +115,7 @@ def test_partial_final_batch_gets_proportional_replay():
 
 
 def test_replay_slots_per_step():
-    for method in ("random", "random_high", "lowest_margin", "mfr", "fmcr"):
+    for method in ("random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr"):
         history, log = run(method)
         assert (history["n_replay"] == 2).all()                    # exactly 2 old pairs every step
         assert len(log) == 2 * len(history)
@@ -148,6 +149,39 @@ def test_fmcr_scores_at_the_first_interval_then_every_refresh():
     dpo.scored.clear()
     run("fmcr")                                                    # initializes once, then refreshes 4 times
     assert len(dpo.scored) == 5 and set(dpo.scored) == {100}
+
+
+def test_cpmr_scores_current_and_projected_margins_every_interval():
+    dpo = load_dpo()
+    dpo.scored.clear()
+    run("cpmr")
+    assert len(dpo.scored) == 10 and set(dpo.scored) == {100}
+
+
+def test_cpmr_saves_counterfactual_state_and_observed_audit(tmp_path):
+    _, log = run("cpmr", progress_path=tmp_path / "history.csv")
+    snapshots = sorted(tmp_path.glob("cpmr_refresh_*.csv"))
+    assert len(snapshots) == 5
+    assert {"projected_margin", "predicted_drop", "next_margin",
+            "observed_minus_projected"} <= set(log.columns)
+    assert log["next_margin"].notna().sum() == 16
+
+
+def test_cpmr_virtual_updates_restore_optimizer_and_scheduler_state():
+    dpo = load_dpo()
+    model = FakeModel()
+    optimizer = dpo.torch.optim.AdamW([], lr=1e-4)
+    scheduler = dpo.get_linear_schedule_with_warmup(optimizer, 1, 10)
+    rows = buffer_with(size=5).rows()
+    future = [split("helpful", 2).to_dict("records"), split("helpful", 2).to_dict("records")]
+    dpo._counterfactual_projected_scores(
+        model, None, rows, future, optimizer, scheduler, [],
+        beta=0.1, micro_batch=2, max_tokens=1024, score_batch_size=4,
+        reference_cache=None,
+    )
+    assert optimizer.steps == 0
+    assert scheduler.steps == 0
+    assert model.training is True
 
 
 def test_fmcr_saves_refresh_state_and_next_refresh_audit(tmp_path):

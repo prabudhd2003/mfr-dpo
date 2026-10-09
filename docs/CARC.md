@@ -141,6 +141,27 @@ The six-method grid—No Replay, Random 10%, original MFR, Random 14.3%, Lowest 
 four orders and both seeds. Do not submit those completed combinations again. Their checkpoints and results are
 under `$MFR_OUTPUT_DIR/runs`.
 
+CPMR is implemented but not yet evaluated. After pulling and testing the commit that contains CPMR, submit only this
+method across all eight cells:
+
+```bash
+for order in 1 2 3 4; do
+  for seed in 0 1; do
+    python scripts/submit_carc.py group \
+      --output-dir "$MFR_OUTPUT_DIR" \
+      --account xiangren_1987 \
+      --gpu l40s \
+      --time 04:00:00 \
+      --order "$order" \
+      --seed "$seed" \
+      --methods cpmr
+  done
+done
+```
+
+CPMR performs reversible virtual training, so it will be slower than Lowest Margin. Four hours per single CPMR run
+is deliberately conservative. Submit each order–seed cell only once.
+
 After Balanced MFR is implemented and configured as `mfr_balanced`, run only that new method across all eight cells:
 
 ```bash

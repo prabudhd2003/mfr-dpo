@@ -153,6 +153,8 @@ def main():
         "micro_batch": protocol["micro_batch"],
         "fmcr_velocity_decay": protocol["fmcr_velocity_decay"],
         "fmcr_forecast_horizon": protocol["fmcr_forecast_horizon"],
+        "cpmr_rule": ("min_current_projected_one_refresh_interval_v1"
+                      if args.method == "cpmr" else None),
     }
     settings["stage1_compatibility_sha256"] = stage1_compatibility_sha256(settings)
     current_info = run_info(ROOT)

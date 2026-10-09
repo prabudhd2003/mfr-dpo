@@ -10,10 +10,11 @@ import warnings
 import numpy as np
 import pandas as pd
 
-METHOD_ORDER = ["none", "random", "random_high", "lowest_margin", "mfr", "fmcr"]
+METHOD_ORDER = ["none", "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr"]
 METHOD_COLORS = {
     "none": "#6b6a66", "random": "#2a78d6", "random_high": "#7857c5",
     "lowest_margin": "#1baf7a", "mfr": "#eb6834", "fmcr": "#b52fb5",
+    "cpmr": "#7a3db8",
 }
 DATASETS = ["safe", "helpful", "quality"]
 

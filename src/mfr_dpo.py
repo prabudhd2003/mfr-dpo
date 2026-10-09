@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import math
 from pathlib import Path
 import time
@@ -213,6 +214,59 @@ def _peak_gb():
     return torch.cuda.max_memory_allocated() / 1e9 if torch.cuda.is_available() else 0.0
 
 
+def _counterfactual_projected_scores(
+    model, tokenizer, buffer_rows, future_steps, optimizer, scheduler, params,
+    beta, micro_batch, max_tokens, score_batch_size, reference_cache,
+):
+    """Measure old-pair margins before and after a reversible new-data-only lookahead.
+
+    The virtual optimizer steps use the real upcoming examples, optimizer state, learning-rate
+    schedule, and model dropout. Parameters, optimizer, scheduler, and random-number state are then
+    restored so the lookahead cannot change the actual experiment trajectory.
+    """
+    current = score_pairs(
+        model, tokenizer, buffer_rows, beta=beta, batch_size=score_batch_size,
+        max_tokens=max_tokens, desc="CPMR: current buffer", reference_cache=reference_cache,
+    )
+    parameter_state = [parameter.detach().clone() for parameter in params]
+    optimizer_state = copy.deepcopy(optimizer.state_dict())
+    scheduler_state = copy.deepcopy(scheduler.state_dict())
+    cpu_rng_state = torch.get_rng_state()
+    cuda_rng_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+    was_training = getattr(model, "training", True)
+
+    try:
+        model.train()
+        # The caller passes one list per upcoming optimizer step. Keeping each step separate is
+        # essential: one large batch would not reproduce the scheduled new-task trajectory.
+        for pairs in tqdm(
+            future_steps, desc="CPMR: virtual lookahead", unit="step", leave=True,
+            dynamic_ncols=True,
+        ):
+            _train_microbatches(
+                model, tokenizer, pairs, optimizer, params, beta, micro_batch, max_tokens,
+                reference_cache,
+            )
+            scheduler.step()
+        projected = score_pairs(
+            model, tokenizer, buffer_rows, beta=beta, batch_size=score_batch_size,
+            max_tokens=max_tokens, desc="CPMR: projected buffer", reference_cache=reference_cache,
+        )
+    finally:
+        with torch.no_grad():
+            for parameter, saved in zip(params, parameter_state):
+                parameter.copy_(saved)
+        optimizer.load_state_dict(optimizer_state)
+        scheduler.load_state_dict(scheduler_state)
+        optimizer.zero_grad()
+        torch.set_rng_state(cpu_rng_state)
+        if cuda_rng_state is not None:
+            torch.cuda.set_rng_state_all(cuda_rng_state)
+        model.train(was_training)
+
+    return current, projected
+
+
 def train_stage(model, tokenizer, df, beta=0.1, lr=1e-4, pairs_per_step=18, micro_batch=2,
                 max_tokens=1024, seed=0, desc="training", reference_cache=None):
     """Train for one pass over all new pairs and return optimizer-step history."""
@@ -274,10 +328,42 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
     for step in bar:
         interval = step // interval_len
         if replaying and step % interval_len == 0:
+            if method == "cpmr":
+                refresh_started = time.time()
+                upcoming_steps = []
+                for future_step in range(step, min(step + interval_len, n_steps)):
+                    future_pairs = rows[
+                        future_step * new_per_step:(future_step + 1) * new_per_step
+                    ]
+                    if future_pairs and "prompt_tokens" in future_pairs[0]:
+                        future_pairs = sorted(future_pairs, key=pair_length)
+                    upcoming_steps.append(future_pairs)
+                current_scores, projected_scores = _counterfactual_projected_scores(
+                    model, tokenizer, buffer.rows(), upcoming_steps, optimizer, scheduler, params,
+                    beta, micro_batch, max_tokens, score_batch_size, reference_cache,
+                )
+                if step > 0:
+                    # These are observed margins after the previous interval's real training. The
+                    # counterfactual projection assumed no replay, so their difference is a useful
+                    # intervention diagnostic rather than a conventional forecast error.
+                    for event in replay_log:
+                        if event["interval"] != interval:
+                            continue
+                        next_margin = float(current_scores.loc[event["id"], "margin"])
+                        event["next_margin"] = next_margin
+                        event["observed_minus_projected"] = (
+                            next_margin - float(event["projected_margin"])
+                        )
+                buffer.set_counterfactual_scores(
+                    current_scores["margin"], projected_scores["margin"]
+                )
+                scoring_seconds += time.time() - refresh_started
+
             # FMCR must score at step zero to initialize absolute policy margins. This also resets
             # velocities at each task boundary so a trend from the previous task is never projected
             # into the new one. Other margin methods retain the original four-refresh schedule.
-            should_score = mfr_replay.needs_refresh(method) and (step > 0 or method == "fmcr")
+            should_score = (method != "cpmr" and mfr_replay.needs_refresh(method)
+                            and (step > 0 or method == "fmcr"))
             if should_score:
                 refresh_started = time.time()
                 scores = score_pairs(
@@ -320,6 +406,9 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
             )
             if method == "fmcr" and progress_path:
                 refresh_path = Path(progress_path).parent / f"fmcr_refresh_{interval + 1}.csv"
+                buffer.rows().to_csv(refresh_path, index=False)
+            if method == "cpmr" and progress_path:
+                refresh_path = Path(progress_path).parent / f"cpmr_refresh_{interval + 1}.csv"
                 buffer.rows().to_csv(refresh_path, index=False)
             plan_at = 0
 

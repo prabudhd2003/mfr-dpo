@@ -1,4 +1,4 @@
-"""Tests for the replay buffer and the four selection rules. CPU only: pytest -q"""
+"""Tests for the replay buffer and replay-selection rules. CPU only: pytest -q"""
 
 import numpy as np
 import pandas as pd
@@ -95,7 +95,11 @@ def test_none_replays_nothing():
 
 def test_every_method_fills_exactly_the_slots():
     buffer = filled_buffer(size=50, two_stages=True)
-    for method in ("random", "random_high", "lowest_margin", "mfr"):
+    buffer.set_counterfactual_scores(
+        buffer.rows().set_index("id")["current_margin"],
+        buffer.rows().set_index("id")["current_margin"],
+    )
+    for method in ("random", "random_high", "lowest_margin", "mfr", "cpmr"):
         plan = plan_interval(buffer, method, 24, np.random.default_rng(0))
         assert len(plan) == 24
         assert set(plan) <= set(buffer.rows()["id"])
@@ -191,9 +195,45 @@ def test_only_margin_based_methods_need_live_refreshes():
     assert mfr_replay.needs_refresh("mfr")
     assert mfr_replay.needs_refresh("lowest_margin")
     assert mfr_replay.needs_refresh("fmcr")
+    assert mfr_replay.needs_refresh("cpmr")
     assert not mfr_replay.needs_refresh("random")
     assert not mfr_replay.needs_refresh("random_high")
     assert not mfr_replay.needs_refresh("none")
+
+
+def test_cpmr_ranks_the_lowest_projected_margin_first():
+    buffer = filled_buffer(size=20)
+    rows = buffer.rows()
+    current = pd.Series(rows["current_margin"].values, index=rows["id"].values)
+    projected = current.copy()
+    projected.iloc[9] = -0.5
+    buffer.set_counterfactual_scores(current, projected)
+    plan = mfr_replay.plan_interval_details(buffer, "cpmr", 1, np.random.default_rng(0))
+    assert plan.iloc[0]["id"] == rows.iloc[9]["id"]
+    assert plan.iloc[0]["projected_margin"] == -0.5
+
+
+def test_cpmr_reduces_to_lowest_margin_when_projected_margins_do_not_change():
+    buffer = filled_buffer(size=20)
+    rows = buffer.rows()
+    current = pd.Series(rows["current_margin"].values, index=rows["id"].values)
+    buffer.set_counterfactual_scores(current, current)
+    cpmr = plan_interval(buffer, "cpmr", 5, np.random.default_rng(3))
+    lowest = plan_interval(buffer, "lowest_margin", 5, np.random.default_rng(3))
+    assert cpmr == lowest
+
+
+def test_cpmr_does_not_hide_a_currently_weak_pair_predicted_to_recover():
+    buffer = filled_buffer(size=20)
+    rows = buffer.rows()
+    current = pd.Series(0.10, index=rows["id"].values)
+    current.iloc[2] = -0.20
+    projected = current.copy()
+    projected.iloc[2] = 0.30
+    buffer.set_counterfactual_scores(current, projected)
+    plan = mfr_replay.plan_interval_details(buffer, "cpmr", 1, np.random.default_rng(0))
+    assert plan.iloc[0]["id"] == rows.iloc[2]["id"]
+    assert plan.iloc[0]["worst_case_margin"] == -0.20
 
 
 # ------------------------------------------------------------------ FMCR
@@ -269,7 +309,7 @@ def test_fmcr_prioritizes_actual_policy_failure():
 def test_fmcr_prioritizes_a_forecast_policy_crossing():
     buffer = forecast_buffer(size=20)
     rows = buffer.rows()
-    relative = rows["current_margin"].to_numpy()
+    relative = rows["current_margin"].to_numpy(copy=True)
     policy = np.full(len(rows), 0.20)
     policy[4] = 0.08  # velocity=-0.12, so the next forecast is below zero
     update_forecast(buffer, relative, policy)
@@ -281,7 +321,7 @@ def test_fmcr_prioritizes_a_forecast_policy_crossing():
 def test_fmcr_prioritizes_an_already_lost_relative_advantage():
     buffer = forecast_buffer(size=20)
     rows = buffer.rows()
-    relative = rows["current_margin"].to_numpy()
+    relative = rows["current_margin"].to_numpy(copy=True)
     relative[6] = -0.10
     update_forecast(buffer, relative, np.full(len(rows), 0.20))
     relative[6] = -0.01  # it is recovering and forecast positive, but is still failed right now
@@ -294,7 +334,7 @@ def test_fmcr_prioritizes_an_already_lost_relative_advantage():
 def test_fmcr_uses_relative_crossing_before_historical_fallback():
     buffer = forecast_buffer(size=20)
     rows = buffer.rows()
-    relative = rows["current_margin"].to_numpy()
+    relative = rows["current_margin"].to_numpy(copy=True)
     policy = np.full(len(rows), 0.20)
     relative[3] = max(0.001, relative[3] * 0.20)  # crosses relative zero next interval
     update_forecast(buffer, relative, policy)
@@ -306,7 +346,7 @@ def test_fmcr_uses_relative_crossing_before_historical_fallback():
 def test_fmcr_fallback_is_original_mfr_drop():
     buffer = forecast_buffer(size=20)
     rows = buffer.rows()
-    relative = rows["current_margin"].to_numpy()
+    relative = rows["current_margin"].to_numpy(copy=True)
     relative[11] -= 0.01
     policy = np.full(len(rows), 0.20)
     update_forecast(buffer, relative, policy)
