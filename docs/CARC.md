@@ -184,6 +184,42 @@ Do not submit the same order–seed–method combination twice. A failed group j
 are skipped and an incomplete run resumes from its first unfinished stage. MIR-DPO may be the slowest of these four
 because every refresh scores the buffer before and after a reversible virtual update.
 
+### Run DAPR-Weak and DAPR-Gated
+
+These development variants are configured as `dapr_weak` and `dapr_gated`. DAPR-Weak changes only the directional
+anchor strength from 0.1 to 0.01. DAPR-Gated keeps strength 0.1 and performs an eval-mode, no-gradient live margin
+check on the two replay pairs before every optimizer step. The gate activates only when `current_margin <
+peak_margin`. Its per-occurrence decisions and margins are written to `replay_log.csv`; per-step gate counts and
+rates are written to `history.csv`.
+
+The development decision rule is fixed before launch: a cell passes when the variant retains earlier behaviors
+better than Random 10% and its final-task accuracy is no more than 2 points below Random 10%. Compare the number of
+passing cells first, then the final three-behavior average, with retention and per-behavior acquisition/final scores
+reported alongside it. If one variant is selected from seeds 0–1, freeze it before confirming on seeds 2–4.
+
+After the currently running jobs finish, commit and push the new code, pull it on CARC, and verify that
+`git status --short` prints nothing. Then submit only the two new variants:
+
+```bash
+for order in 1 2 3 4; do
+  for seed in 0 1; do
+    python scripts/submit_carc.py group \
+      --output-dir "$MFR_OUTPUT_DIR" \
+      --account xiangren_1987 \
+      --gpu l40s \
+      --time 04:00:00 \
+      --order "$order" \
+      --seed "$seed" \
+      --methods dapr_weak,dapr_gated
+  done
+done
+```
+
+This submits eight jobs. Each job runs the two variants sequentially and reuses the matching completed No-Replay
+Stage-1 checkpoint. Do not edit or save tracked repository files while jobs are queued or running. After all runs
+finish, rerun notebook 07 from the beginning; its DAPR-Gated section reports gate activation by cell, stage, replay
+source, and interval.
+
 After Balanced MFR is implemented and configured as `mfr_balanced`, run only that new method across all eight cells:
 
 ```bash

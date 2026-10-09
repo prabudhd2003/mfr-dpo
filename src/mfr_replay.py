@@ -16,6 +16,8 @@ The methods differ in which stored pairs fill the replay slots of each training 
     fmcr            pairs forecast to cross a preference boundary before the next refresh
     cpmr            the lowest projected margin after a counterfactual new-task update interval
     dapr            lowest-margin replay plus directional peak-token anchoring
+    dapr_weak       DAPR with a ten-times weaker directional anchor
+    dapr_gated      DAPR whose anchor activates only after a live margin regression
     dapr_c          DAPR with common-shift-centred token anchoring
     mir_dpo         largest one-step increase in old-pair DPO loss (MIR adapted to DPO)
     copr_adapted    lowest-margin replay plus a peak pair-distribution constraint
@@ -31,11 +33,11 @@ from mfr_utils import buffer_seed
 
 METHODS = (
     "none", "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr",
-    "dapr", "dapr_c", "mir_dpo", "copr_adapted",
+    "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
 )
 REFRESH_METHODS = (
-    "lowest_margin", "mfr", "fmcr", "cpmr", "dapr", "dapr_c", "mir_dpo",
-    "copr_adapted",
+    "lowest_margin", "mfr", "fmcr", "cpmr", "dapr", "dapr_weak", "dapr_gated",
+    "dapr_c", "mir_dpo", "copr_adapted",
 )
 FORECAST_COLUMNS = [
     "previous_margin", "margin_velocity",
@@ -344,7 +346,9 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
     if method in ("random", "random_high"):
         score = tiebreak
         order = np.argsort(tiebreak)                                     # a random permutation
-    elif method in ("lowest_margin", "dapr", "dapr_c", "copr_adapted"):
+    elif method in (
+        "lowest_margin", "dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted",
+    ):
         score = -rows["current_margin"].to_numpy()
         order = np.lexsort((tiebreak, rows["current_margin"].to_numpy()))          # ascending
     else:  # mfr

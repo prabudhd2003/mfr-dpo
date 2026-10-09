@@ -16,7 +16,14 @@ from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, get_linear_schedule_with_warmup
 
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
-ANCHOR_METHODS = ("dapr", "dapr_c", "copr_adapted")
+ANCHOR_METHODS = (
+    "dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted",
+)
+# Diagnostics that describe the anchors actually applied. They are averaged over anchored
+# replay pairs only, so DAPR-Gated's gated-off occurrences cannot dilute them.
+ANCHORED_RATE_KEYS = (
+    "chosen_violation_rate", "rejected_violation_rate", "huber_cap_rate", "anchor_common_shift",
+)
 
 
 def load_model(model_name=MODEL_NAME, lora_r=16, adapter_path=None, revision=None,
@@ -84,6 +91,12 @@ def make_batch(tokenizer, rows, max_tokens=1024, device="cuda"):
         "n_pairs": len(rows),
         "pair_ids": [row.get("id") for row in rows],
         "is_replay": [bool(row.get("_is_replay", False)) for row in rows],
+        # Ordinary anchor methods keep every replay anchor active. DAPR-Gated supplies an
+        # explicit per-occurrence decision before this batch is constructed.
+        "anchor_gate_active": [
+            bool(row.get("_anchor_gate_active", row.get("_is_replay", False))) for row in rows
+        ],
+        "anchor_gate_recorded": ["_anchor_gate_active" in row for row in rows],
     }
 
 
@@ -164,11 +177,23 @@ def _anchor_regularizer(method, policy, token_logp, seq_index, batch, anchors, h
         }
 
     penalties, chosen_rates, rejected_rates, cap_rates, shifts = [], [], [], [], []
+    active_anchors = 0
     for index in replay_indices:
         pair_id = batch["pair_ids"][index]
         if pair_id not in anchors:
             raise KeyError(f"peak preference anchor missing for replay pair {pair_id!r}")
         saved = anchors[pair_id]
+        if method == "dapr_gated" and not bool(batch["anchor_gate_recorded"][index]):
+            raise ValueError(f"DAPR-Gated decision missing for replay pair {pair_id!r}")
+        gate_active = method != "dapr_gated" or bool(batch["anchor_gate_active"][index])
+        if not gate_active:
+            # Keep an explicit zero in the mean. Averaging only over active anchors would make
+            # each remaining anchor stronger as the gate rate falls and would confound the
+            # activation ablation with a strength change. The rate diagnostics, by contrast,
+            # describe applied anchors only, so this occurrence is left out of them.
+            penalties.append(policy.new_zeros(()))
+            continue
+        active_anchors += 1
         current_chosen = token_logp[seq_index == index]
         current_rejected = token_logp[seq_index == n + index]
         anchor_chosen = torch.as_tensor(
@@ -217,14 +242,19 @@ def _anchor_regularizer(method, policy, token_logp, seq_index, batch, anchors, h
         cap_rates.append((violations > huber_delta).float().mean().item())
         shifts.append(common_shift.item())
 
+    def anchored_mean(values):
+        return float(np.mean(values)) if values else float("nan")
+
     regularizer = torch.stack(penalties).mean()
     return regularizer, {
+        # anchor_loss is the objective term: a mean over every replay pair in which gated-off
+        # pairs contribute zero. The rates and shift are means over anchored pairs only.
         "anchor_loss": regularizer.detach().item(),
-        "chosen_violation_rate": float(np.mean(chosen_rates)),
-        "rejected_violation_rate": float(np.mean(rejected_rates)),
-        "huber_cap_rate": float(np.mean(cap_rates)),
-        "anchor_common_shift": float(np.mean(shifts)),
-        "anchored_pairs": len(replay_indices),
+        "chosen_violation_rate": anchored_mean(chosen_rates),
+        "rejected_violation_rate": anchored_mean(rejected_rates),
+        "huber_cap_rate": anchored_mean(cap_rates),
+        "anchor_common_shift": anchored_mean(shifts),
+        "anchored_pairs": active_anchors,
     }
 
 
@@ -270,7 +300,7 @@ def dpo_loss(model, batch, beta, reference_cache=None, method="none", anchors=No
 
 @torch.no_grad()
 def score_pairs(model, tokenizer, df, beta=0.1, batch_size=4, max_tokens=1024,
-                desc="scoring", reference_cache=None):
+                desc="scoring", reference_cache=None, show_progress=True):
     """Score relative-to-base and absolute policy preference margins for every pair."""
     was_training = model.training
     model.eval()
@@ -279,7 +309,8 @@ def score_pairs(model, tokenizer, df, beta=0.1, batch_size=4, max_tokens=1024,
     columns = {name: [0.0] * len(rows) for name in
                ("margin", "margin_sum", "policy_margin", "policy_margin_sum")}
     for start in tqdm(
-        range(0, len(rows), batch_size), desc=desc, unit="batch", leave=True, dynamic_ncols=True
+        range(0, len(rows), batch_size), desc=desc, unit="batch", leave=show_progress,
+        dynamic_ncols=True, disable=not show_progress,
     ):
         indices = order[start:start + batch_size]
         batch = make_batch(tokenizer, [rows[i] for i in indices], max_tokens)
@@ -298,6 +329,47 @@ def score_pairs(model, tokenizer, df, beta=0.1, batch_size=4, max_tokens=1024,
     if was_training:
         model.train()
     return pd.DataFrame(columns, index=df["id"].values)
+
+
+def score_anchor_gate_margins(model, tokenizer, rows, beta=0.1, max_tokens=1024,
+                              reference_cache=None):
+    """Score the exact eval-mode margin used to gate this step's replay occurrences.
+
+    ``score_pairs`` temporarily switches the model to evaluation mode and restores its prior mode.
+    With the normal two-pair replay budget this is one no-gradient batched forward pass over four
+    sequences. No validation or test data are involved.
+    """
+    if not rows:
+        return {}
+    frame = pd.DataFrame(rows)
+    scores = score_pairs(
+        model, tokenizer, frame, beta=beta, batch_size=len(frame), max_tokens=max_tokens,
+        desc="DAPR gate", reference_cache=reference_cache, show_progress=False,
+    )
+    return scores["margin"].astype(float).to_dict()
+
+
+def attach_anchor_gate_decisions(rows, current_margins):
+    """Attach auditable DAPR gate fields to replay occurrences without changing their order."""
+    marked = []
+    for row in rows:
+        pair_id = row.get("id")
+        if pair_id not in current_margins:
+            raise KeyError(f"live gate margin missing for replay pair {pair_id!r}")
+        if "peak_margin" not in row or not np.isfinite(float(row["peak_margin"])):
+            raise ValueError(f"peak gate margin missing for replay pair {pair_id!r}")
+        current = float(current_margins[pair_id])
+        peak = float(row["peak_margin"])
+        if not np.isfinite(current):
+            raise ValueError(f"live gate margin is not finite for replay pair {pair_id!r}")
+        marked.append({
+            **row,
+            "_anchor_gate_active": current < peak,
+            "_gate_current_margin": current,
+            "_gate_peak_margin": peak,
+            "_gate_margin_drop": peak - current,
+        })
+    return marked
 
 
 def score_margins(model, tokenizer, df, beta=0.1, batch_size=4, max_tokens=1024,
@@ -414,8 +486,21 @@ def _train_microbatches(model, tokenizer, pairs, optimizer, params, beta, micro_
         "dpo_loss": 0.0, "anchor_loss": 0.0, "weighted_anchor_loss": 0.0,
         "chosen_violation_rate": 0.0, "rejected_violation_rate": 0.0,
         "huber_cap_rate": 0.0, "anchor_common_shift": 0.0, "anchored_pairs": 0.0,
+        "anchor_gate_active_pairs": 0, "anchor_gate_total_pairs": 0,
+        "anchor_gate_rate": np.nan,
     }
     total_replay = sum(bool(pair.get("_is_replay", False)) for pair in pairs)
+    anchored_sums = dict.fromkeys(ANCHORED_RATE_KEYS, 0.0)
+    if method == "dapr_gated":
+        gate_active = sum(
+            bool(pair.get("_anchor_gate_active", False))
+            for pair in pairs if pair.get("_is_replay", False)
+        )
+        step_diagnostics["anchor_gate_active_pairs"] = int(gate_active)
+        step_diagnostics["anchor_gate_total_pairs"] = int(total_replay)
+        step_diagnostics["anchor_gate_rate"] = (
+            float(gate_active / total_replay) if total_replay else np.nan
+        )
     for start in range(0, len(pairs), micro_batch):
         chunk = pairs[start:start + micro_batch]
         batch = make_batch(tokenizer, chunk, max_tokens)
@@ -435,22 +520,32 @@ def _train_microbatches(model, tokenizer, pairs, optimizer, params, beta, micro_
         )
         if len(result) == 2:  # CPU bookkeeping tests replace dpo_loss with a two-value stand-in.
             loss, accuracy = result
-            diagnostics = step_diagnostics
+            diagnostics = {}
         else:
             loss, accuracy, diagnostics = result
         (loss * weight).backward()
         step_loss += loss.item() * weight
         step_acc += accuracy * weight
         step_diagnostics["dpo_loss"] += float(diagnostics.get("dpo_loss", 0.0)) * weight
-        for key in (
-            "anchor_loss", "chosen_violation_rate", "rejected_violation_rate",
-            "huber_cap_rate", "anchor_common_shift",
-        ):
-            step_diagnostics[key] += float(diagnostics.get(key, 0.0)) * replay_weight
+        step_diagnostics["anchor_loss"] += float(diagnostics.get("anchor_loss", 0.0)) * replay_weight
         step_diagnostics["weighted_anchor_loss"] = (
             float(anchor_strength) * step_diagnostics["anchor_loss"]
         )
-        step_diagnostics["anchored_pairs"] += float(diagnostics.get("anchored_pairs", 0.0))
+        chunk_anchored = float(diagnostics.get("anchored_pairs", 0.0))
+        if chunk_anchored > 0:
+            for key in ANCHORED_RATE_KEYS:
+                anchored_sums[key] += float(diagnostics.get(key, 0.0)) * chunk_anchored
+        step_diagnostics["anchored_pairs"] += chunk_anchored
+    # Rates are averaged over anchored pairs. When every anchor is applied (all methods except
+    # DAPR-Gated) this equals the previous replay-share weighting exactly. A step whose replay
+    # pairs were all gated off has no anchored pair to describe and records NaN rather than a
+    # misleading 0%. Steps without replay, and non-anchor methods, keep the previous 0.0.
+    anchored_total = step_diagnostics["anchored_pairs"]
+    for key in ANCHORED_RATE_KEYS:
+        if anchored_total > 0:
+            step_diagnostics[key] = anchored_sums[key] / anchored_total
+        elif total_replay and method in ANCHOR_METHODS:
+            step_diagnostics[key] = np.nan
     torch.nn.utils.clip_grad_norm_(params, 1.0)
     optimizer.step()
     return step_loss, step_acc, step_diagnostics
@@ -690,9 +785,25 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
         old_ids = selected["id"].tolist() if len(selected) else []
         marked_new = [{**pair, "_is_replay": False} for pair in new_pairs]
         marked_old = [{**pair, "_is_replay": True} for pair in buffer.get(old_ids)] if old_ids else []
+        if method == "dapr_gated" and marked_old:
+            gate_started = time.time()
+            gate_margins = score_anchor_gate_margins(
+                model, tokenizer, marked_old, beta=beta, max_tokens=max_tokens,
+                reference_cache=reference_cache,
+            )
+            marked_old = attach_anchor_gate_decisions(marked_old, gate_margins)
+            scoring_seconds += time.time() - gate_started
         pairs = marked_new + marked_old
-        for _, item in selected.iterrows():
-            replay_log.append({"step": step + 1, "interval": interval + 1, **item.to_dict()})
+        for (_, item), replay_pair in zip(selected.iterrows(), marked_old):
+            event = {"step": step + 1, "interval": interval + 1, **item.to_dict()}
+            if method == "dapr_gated":
+                event.update({
+                    "anchor_gate_active": bool(replay_pair["_anchor_gate_active"]),
+                    "gate_current_margin": float(replay_pair["_gate_current_margin"]),
+                    "gate_peak_margin": float(replay_pair["_gate_peak_margin"]),
+                    "gate_margin_drop": float(replay_pair["_gate_margin_drop"]),
+                })
+            replay_log.append(event)
         if "prompt_tokens" in pairs[0]:
             pairs = sorted(pairs, key=pair_length)
         loss, accuracy, diagnostics = _train_microbatches(

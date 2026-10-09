@@ -15,8 +15,8 @@ import mfr_cache
 import mfr_data
 import mfr_dpo
 from mfr_replay import METHODS as IMPLEMENTED_METHODS, ReplayBuffer
-from mfr_utils import (file_sha256, load_protocol, mark_run_complete, method_old_per_step,
-                       run_info, save_json_atomic, seed_everything, stage_seed,
+from mfr_utils import (file_sha256, load_protocol, mark_run_complete, method_anchor_strength,
+                       method_old_per_step, run_info, save_json_atomic, seed_everything, stage_seed,
                        stage1_compatibility_sha256,
                        validate_resume_settings, validate_stage1_source)
 
@@ -129,6 +129,7 @@ def main():
     if not 1 <= args.start_stage <= n_stages:
         raise ValueError(f"start stage must be between 1 and {n_stages}")
     old_per_step = method_old_per_step(protocol, args.method)
+    anchor_strength = method_anchor_strength(protocol, args.method)
     run_name = f"{protocol['data_version']}_o{args.order}_{args.method}_s{args.seed}"
     print(
         f"Starting {run_name}: order={' -> '.join(order)}, "
@@ -166,13 +167,17 @@ def main():
         "micro_batch": protocol["micro_batch"],
         "fmcr_velocity_decay": protocol["fmcr_velocity_decay"],
         "fmcr_forecast_horizon": protocol["fmcr_forecast_horizon"],
-        "anchor_strength": protocol["anchor_strength"],
+        "anchor_strength": anchor_strength,
         "dapr_huber_delta": protocol["dapr_huber_delta"],
         "mir_lookahead_steps": protocol["mir_lookahead_steps"],
         "cpmr_rule": ("min_current_projected_one_refresh_interval_v1"
                       if args.method == "cpmr" else None),
         "dapr_rule": ("lowest_margin_directional_peak_token_anchor_v1"
                       if args.method == "dapr" else
+                      "lowest_margin_weak_directional_peak_token_anchor_v1"
+                      if args.method == "dapr_weak" else
+                      "lowest_margin_live_margin_gated_directional_peak_token_anchor_v1"
+                      if args.method == "dapr_gated" else
                       "lowest_margin_centered_directional_peak_token_anchor_v1"
                       if args.method == "dapr_c" else None),
         "mir_dpo_rule": ("one_incoming_step_dpo_loss_increase_v1"
@@ -296,7 +301,7 @@ def main():
             reference_cache=reference_cache,
             fmcr_velocity_decay=protocol["fmcr_velocity_decay"],
             fmcr_forecast_horizon=protocol["fmcr_forecast_horizon"],
-            anchors=anchors, anchor_strength=protocol["anchor_strength"],
+            anchors=anchors, anchor_strength=anchor_strength,
             huber_delta=protocol["dapr_huber_delta"],
             mir_lookahead_steps=protocol["mir_lookahead_steps"],
         )

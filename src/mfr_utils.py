@@ -81,6 +81,11 @@ def load_protocol(path="configs/experiment_protocol.json"):
     if not isinstance(protocol["mir_lookahead_steps"], int) or protocol["mir_lookahead_steps"] <= 0:
         raise ValueError("mir_lookahead_steps must be a positive integer")
     known_methods = set(protocol.get("methods", [])) | set(protocol.get("secondary_methods", []))
+    for method, strength in protocol.get("anchor_strength_overrides", {}).items():
+        if method not in known_methods:
+            raise ValueError(f"anchor-strength override names unknown method {method!r}")
+        if not isinstance(strength, (int, float)) or strength < 0:
+            raise ValueError(f"anchor-strength override for {method!r} must be non-negative")
     for method, old_per_step in protocol.get("old_per_step_overrides", {}).items():
         if method not in known_methods:
             raise ValueError(f"old_per_step override names unknown method {method!r}")
@@ -92,6 +97,13 @@ def load_protocol(path="configs/experiment_protocol.json"):
 def method_old_per_step(protocol, method):
     """Return the recorded replay budget for one method."""
     return int(protocol.get("old_per_step_overrides", {}).get(method, protocol["old_per_step"]))
+
+
+def method_anchor_strength(protocol, method):
+    """Return the recorded anchor coefficient for one method."""
+    return float(
+        protocol.get("anchor_strength_overrides", {}).get(method, protocol["anchor_strength"])
+    )
 
 
 def file_sha256(path, chunk_size=1024 * 1024):

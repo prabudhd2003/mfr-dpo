@@ -100,8 +100,8 @@ def test_every_method_fills_exactly_the_slots():
         buffer.rows().set_index("id")["current_margin"],
     )
     for method in (
-        "random", "random_high", "lowest_margin", "mfr", "cpmr", "dapr", "dapr_c",
-        "copr_adapted",
+        "random", "random_high", "lowest_margin", "mfr", "cpmr", "dapr", "dapr_weak",
+        "dapr_gated", "dapr_c", "copr_adapted",
     ):
         plan = plan_interval(buffer, method, 24, np.random.default_rng(0))
         assert len(plan) == 24
@@ -129,7 +129,7 @@ def test_lowest_margin_picks_the_lowest_current_margins():
 
 def test_anchor_methods_use_the_same_selection_as_lowest_margin():
     buffer = filled_buffer(size=20)
-    for method in ("dapr", "dapr_c", "copr_adapted"):
+    for method in ("dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted"):
         assert plan_interval(buffer, method, 5, np.random.default_rng(4)) == plan_interval(
             buffer, "lowest_margin", 5, np.random.default_rng(4)
         )
@@ -208,6 +208,8 @@ def test_only_margin_based_methods_need_live_refreshes():
     assert mfr_replay.needs_refresh("fmcr")
     assert mfr_replay.needs_refresh("cpmr")
     assert mfr_replay.needs_refresh("dapr")
+    assert mfr_replay.needs_refresh("dapr_weak")
+    assert mfr_replay.needs_refresh("dapr_gated")
     assert mfr_replay.needs_refresh("dapr_c")
     assert mfr_replay.needs_refresh("mir_dpo")
     assert mfr_replay.needs_refresh("copr_adapted")

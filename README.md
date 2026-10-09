@@ -48,19 +48,21 @@ and random state before real training continues.
 
 Balanced MFR and At-Risk MFR are planned controlled ablations and are **not implemented or evaluated yet**.
 
-Four additional controlled methods are implemented and ready for validation, but have no reported results yet:
+Six additional controlled methods are implemented as secondary comparisons or development ablations:
 
 | Method | Fixed-budget test |
 |---|---|
-| DAPR 10% | Uses Lowest Margin retrieval, then one-sided token anchors to stop a replayed chosen response from weakening or a rejected response from strengthening beyond its peak-time state. |
+| DAPR-Strong 10% (`dapr`) | Uses Lowest Margin retrieval, then one-sided token anchors with strength 0.1 to stop a replayed chosen response from weakening or a rejected response from strengthening beyond its peak-time state. |
+| DAPR-Weak 10% (`dapr_weak`) | Changes only DAPR's anchor strength from 0.1 to 0.01. |
+| DAPR-Gated 10% (`dapr_gated`) | Keeps strength 0.1 but applies the anchor only when an eval-mode, per-step live margin is below the pair's stored peak margin. |
 | DAPR-C 10% | Centers DAPR on the pair's common likelihood shift, so it constrains preference direction rather than penalizing both responses merely becoming more or less likely. |
 | MIR-DPO 10% | Performs one reversible incoming-task update and replays old pairs whose DPO loss is predicted to increase most. This is the preference-learning adaptation of MIR. |
 | COPR-adapted 10% | Uses Lowest Margin retrieval and constrains the replayed pair's two-response policy distribution toward its peak-time distribution. It is a controlled COPR-inspired adaptation, not a reproduction of full COPR. |
 
-All four use exactly the same 10% replay budget, buffer, refresh schedule, behavior cap, data, and Stage-1 checkpoint
-as the established methods. DAPR, DAPR-C, and COPR-adapted save auditable peak anchors in
-`preference_anchors.npz`; MIR-DPO saves each virtual-loss snapshot in `mir_dpo_refresh_*.csv`. Until the full grid is
-complete, these methods should be described as **implemented, not evaluated**.
+All six use exactly the same 10% replay budget, buffer, refresh schedule, behavior cap, data, and Stage-1 checkpoint
+as the established methods. Every DAPR variant, DAPR-C, and COPR-adapted saves auditable peak anchors in
+`preference_anchors.npz`; MIR-DPO saves each virtual-loss snapshot in `mir_dpo_refresh_*.csv`. DAPR-Weak and
+DAPR-Gated should be described as **implemented, not evaluated** until their eight-cell grids are complete.
 
 ## Data
 

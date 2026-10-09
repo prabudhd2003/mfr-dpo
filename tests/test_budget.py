@@ -117,7 +117,7 @@ def test_partial_final_batch_gets_proportional_replay():
 def test_replay_slots_per_step():
     for method in (
         "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr", "dapr",
-        "dapr_c", "mir_dpo", "copr_adapted",
+        "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
     ):
         history, log = run(method)
         assert (history["n_replay"] == 2).all()                    # exactly 2 old pairs every step
@@ -145,6 +145,19 @@ def test_buffer_is_rescored_once_per_interval_except_the_first():
         dpo.scored.clear()
         run(method)
         assert dpo.scored == []                                    # these never re-score
+
+
+def test_gated_dapr_scores_only_the_replay_pairs_at_every_step():
+    dpo = load_dpo()
+    dpo.scored.clear()
+    history, log = run("dapr_gated")
+    assert dpo.scored.count(2) == len(history)                      # one live two-pair gate per step
+    assert dpo.scored.count(100) == 4                              # unchanged buffer refresh schedule
+    assert (history["anchor_gate_total_pairs"] == 2).all()
+    assert (history["anchor_gate_active_pairs"] == 0).all()        # fake live margin equals peak
+    assert (history["anchor_gate_rate"] == 0.0).all()
+    assert {"anchor_gate_active", "gate_current_margin", "gate_peak_margin",
+            "gate_margin_drop"} <= set(log.columns)
 
 
 def test_fmcr_scores_at_the_first_interval_then_every_refresh():

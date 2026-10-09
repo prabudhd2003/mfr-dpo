@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-from mfr_utils import (load_protocol, method_old_per_step, validate_resume_settings,
+from mfr_utils import (load_protocol, method_anchor_strength, method_old_per_step,
+                       validate_resume_settings,
                        stage1_compatibility_sha256, validate_stage1_source)
 
 
@@ -14,11 +15,16 @@ def test_protocol_uses_exact_ten_percent_replay():
     assert "random_high" in protocol["secondary_methods"]
     assert "fmcr" in protocol["secondary_methods"]
     assert "cpmr" in protocol["secondary_methods"]
-    assert {"dapr", "dapr_c", "mir_dpo", "copr_adapted"} <= set(protocol["secondary_methods"])
+    assert {
+        "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
+    } <= set(protocol["secondary_methods"])
     assert protocol["orders"]["3"] == ["quality", "helpful", "safe"]
     assert protocol["orders"]["4"] == ["quality", "safe", "helpful"]
     assert method_old_per_step(protocol, "random") == 2
     assert method_old_per_step(protocol, "random_high") == 3
+    assert method_anchor_strength(protocol, "dapr") == 0.1
+    assert method_anchor_strength(protocol, "dapr_weak") == 0.01
+    assert method_anchor_strength(protocol, "dapr_gated") == 0.1
     assert protocol["lora_alpha"] == 32 and protocol["epochs"] == 1
 
 

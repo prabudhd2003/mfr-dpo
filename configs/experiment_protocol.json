@@ -17,6 +17,8 @@
     "fmcr",
     "cpmr",
     "dapr",
+    "dapr_weak",
+    "dapr_gated",
     "dapr_c",
     "mir_dpo",
     "copr_adapted"
@@ -44,6 +46,10 @@
   "fmcr_velocity_decay": 0.5,
   "fmcr_forecast_horizon": 1.0,
   "anchor_strength": 0.1,
+  "anchor_strength_overrides": {
+    "dapr_weak": 0.01,
+    "dapr_gated": 0.1
+  },
   "dapr_huber_delta": 1.0,
   "mir_lookahead_steps": 1,
   "primary_metric": "accuracy",
