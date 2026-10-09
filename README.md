@@ -79,17 +79,62 @@ A value near zero is better. A negative value means the model forgot some of tha
 
 ## Current validation results
 
-The following table averages all eight order–seed cells. “Old behavior change” is retention change, so less negative
-is better.
+The following table averages all eight order–seed cells. “Average forgetting” is the change in an earlier behavior
+between the point when it was learned and the end of training. Less negative is better. All changes in the table are
+**percentage-point changes**, not relative percentages.
 
-| Method | Average old behavior change | Final current-task accuracy | Final average across all three | Runtime per run |
+| Method | Average forgetting | Forgetting prevented vs no replay | Final average accuracy | Change vs no replay |
 |---|---:|---:|---:|---:|
-| No replay | -7.94 | 74.81 | 70.77 | 22.48 min |
-| Random 10% | -5.50 | 73.62 | 71.71 | 24.28 min |
-| MFR 10% | -4.88 | 73.75 | 71.98 | 28.28 min |
-| Random 14.3% | -5.47 | 73.88 | 71.73 | 24.91 min |
-| Lowest margin | **-4.47** | **74.31** | **72.56** | 28.59 min |
-| FMCR 10% | -5.44 | **74.75** | 72.21 | 29.26 min |
+| No replay | -7.94 | — | 70.77 | — |
+| Random 10% | -5.50 | about **31%** | 71.71 | +2.44 retention, +0.94 final |
+| MFR 10% | -4.88 | about **39%** | 71.98 | +3.06 retention, +1.21 final |
+| Random 14.3% | -5.47 | about **31%** | 71.73 | +2.47 retention, +0.96 final |
+| Lowest margin | **-4.47** | about **44%** | **72.56** | **+3.47 retention, +1.79 final** |
+| FMCR 10% | -5.44 | about **31%** | 72.21 | +2.50 retention, +1.44 final |
+
+“Forgetting prevented” expresses the improvement relative to the 7.94-point forgetting observed without replay.
+For example, MFR recovers 3.06 of those 7.94 points, so it prevents approximately `3.06 / 7.94 = 39%` of the
+measured forgetting. It does **not** mean that MFR raises total model accuracy by 39%.
+
+In simple terms:
+
+- Random 10% prevents approximately **31% of the forgetting**.
+- MFR 10% prevents approximately **39% of the forgetting**.
+- Random 14.3% also prevents approximately **31% of the forgetting** despite using more replay examples.
+- Lowest Margin prevents approximately **44% of the forgetting**, the strongest result so far.
+- FMCR prevents approximately **31% of the forgetting** and favors final-task learning more than retention.
+
+For additional context, final current-task accuracy was 74.81 for No Replay, 73.62 for Random 10%, 73.75 for MFR,
+73.88 for Random 14.3%, 74.31 for Lowest Margin, and 74.75 for FMCR. Average runtime per run ranged from 22.48
+minutes for No Replay to 29.26 minutes for FMCR; targeted methods are slower because they score replay candidates.
+
+### Is this size of improvement normal?
+
+Yes. In continual-learning research, a replay method may produce a modest change in final average accuracy while
+producing a clearer reduction in forgetting. The closest comparisons below do **not** use our exact combination of
+datasets, model, or protocol, so their raw scores should not be treated as direct benchmarks for this project. They
+show how replay improvements are normally interpreted.
+
+- [Maximally Interfered Retrieval (MIR), NeurIPS 2019](https://proceedings.neurips.cc/paper/2019/file/15825aee15eb335cc13f9b559f166ee8-Paper.pdf)
+  compared targeted selection with ordinary experience replay. On MiniImageNet, targeted replay increased final
+  accuracy from 24.7 to 25.2—only 0.5 points—but reduced forgetting from 23.5 to 18.0, a 5.5-point improvement. The
+  paper therefore described accuracy as only slightly better while forgetting improved substantially.
+- [Leitner-Guided Memory Replay, NAACL 2024](https://aclanthology.org/2024.naacl-long.432/) found that selecting
+  informative replay examples consistently reduced forgetting while maintaining accuracy across tasks, task orders,
+  and languages. This supports evaluating retention separately from final accuracy.
+- [SEEKR, EMNLP 2024](https://aclanthology.org/2024.emnlp-main.190/) achieved comparable or better continual-learning
+  performance with one-tenth of the replay data used by comparison methods and reduced replay to 1%. This shows that
+  replay efficiency can itself be a meaningful result even when the absolute accuracy difference is small.
+- [COPR, Findings of ACL 2025](https://aclanthology.org/2025.findings-acl.281.pdf) studies continual human-preference
+  learning more directly. It uses 5% historical data for experience-replay baselines and reports average performance,
+  backward transfer, and forgetting as separate quantities rather than judging a method from final preference score
+  alone.
+
+Our results follow the same general pattern: replay changes final average accuracy by roughly 1–2 points, but it
+prevents 31–44% of the forgetting measured without replay. MFR's 0.62-point retention advantage over equal-budget
+Random 10% is modest, but its paired 95% bootstrap interval, `[0.22, 1.09]`, excludes zero. This makes the retention
+result credible within the current experiment grid, although generation and human evaluation are still needed to
+show whether the difference is noticeable in model responses.
 
 What these results support:
 
