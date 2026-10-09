@@ -108,27 +108,19 @@ Add tests proving that:
 - Include the method in the full-grid summary, per-dataset forgetting, heatmaps, paired comparisons, and runtime table.
 - Compare it directly with original MFR, equal-budget random, and lowest margin.
 
-## Stage-1 compatibility change required before running
+## Stage-1 compatibility
 
-The current `validate_stage1_source()` compares `scientific_code_sha256`. That hash includes `src/mfr_replay.py`, so
-adding this method changes the hash and makes the old no-replay Stage-1 runs appear incompatible even though Stage 1
-never uses replay.
+The Stage-1-specific compatibility fingerprint is already implemented and tested. It allows a replay-only extension
+to borrow the completed no-replay Stage-1 checkpoint while keeping full resume validation strict. Do not replace or
+weaken it.
 
-Fix this without weakening resume protection:
+When adding Balanced MFR, verify that:
 
 1. Keep the full `scientific_code_sha256` for complete-run provenance and resume validation.
-2. Add a separate Stage-1 compatibility fingerprint based only on Stage-1 training/scoring code and the exact
-   Stage-1 settings, data manifest, model revision, order, and seed.
-3. Store that value in new run settings.
-4. Make `validate_stage1_source()` compare the Stage-1 fingerprint and Stage-1 settings rather than the full replay
-   implementation hash.
-5. Add tests proving that a replay-only code change allows Stage-1 reuse, while a change to data, model, seed, order,
-   learning rate, DPO beta, LoRA settings, or Stage-1 training code is rejected.
-6. Keep `validate_resume_settings()` strict: a partially completed run may resume only with the same full scientific
-   code hash.
-
-For existing Stage-1 artifacts that do not contain the new fingerprint, use an explicit, tested legacy-compatibility
-path based on their recorded settings and the known audited source commit. Do not silently accept a missing value.
+2. Keep using the separate Stage-1 fingerprint already stored by new runs.
+3. Preserve the explicit legacy compatibility path for the completed v2 protocol-2.1 artifacts.
+4. Confirm that replay-only changes allow Stage-1 reuse while data, model, seed, order, optimizer, DPO, LoRA, or
+   Stage-1 training changes are rejected.
 
 ## Checks before GPU submission
 
@@ -159,7 +151,7 @@ for order in 1 2 3 4; do
 done
 ```
 
-The original five methods do not need to be rerun if the common data, model, training, scoring, and replay budgets are
+The six completed methods do not need to be rerun if the common data, model, training, scoring, and replay budgets are
 unchanged and Stage-1 compatibility is verified.
 
 ## How to interpret the result

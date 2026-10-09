@@ -137,39 +137,9 @@ One group job runs the requested methods sequentially for one order and seed. Th
 | 3 | Quality → Helpful → Safe |
 | 4 | Quality → Safe → Helpful |
 
-The original five-method grid has already been completed. FMCR is now configured as a sixth method. To run FMCR for
-one order and seed without touching the completed methods:
-
-```bash
-python scripts/submit_carc.py group \
-  --output-dir "$MFR_OUTPUT_DIR" \
-  --account xiangren_1987 \
-  --gpu l40s \
-  --time 04:00:00 \
-  --order 1 \
-  --seed 0 \
-  --methods fmcr
-```
-
-Run FMCR across all four orders and both seeds:
-
-```bash
-for order in 1 2 3 4; do
-  for seed in 0 1; do
-    python scripts/submit_carc.py group \
-      --output-dir "$MFR_OUTPUT_DIR" \
-      --account xiangren_1987 \
-      --gpu l40s \
-      --time 04:00:00 \
-      --order "$order" \
-      --seed "$seed" \
-      --methods fmcr
-  done
-done
-```
-
-Because FMCR is in the protocol, omitting `--methods fmcr` also works: the group runner skips the five completed runs
-and runs FMCR. The explicit method argument is recommended because it makes the intended job unambiguous.
+The six-method grid—No Replay, Random 10%, original MFR, Random 14.3%, Lowest Margin, and FMCR—is complete for all
+four orders and both seeds. Do not submit those completed combinations again. Their checkpoints and results are
+under `$MFR_OUTPUT_DIR/runs`.
 
 After Balanced MFR is implemented and configured as `mfr_balanced`, run only that new method across all eight cells:
 
@@ -205,7 +175,7 @@ for order in 1 2 3 4; do
 done
 ```
 
-The existing completed `none` run supplies the matching Stage-1 checkpoint. Do not rerun the original five methods
+The existing completed `none` run supplies the matching Stage-1 checkpoint. Do not rerun the six completed methods
 just because a new replay method is added. The runner now checks a separate Stage-1 compatibility fingerprint, so a
 replay-only extension can reuse the completed checkpoint while a real Stage-1 training change is still rejected.
 

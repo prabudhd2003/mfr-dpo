@@ -23,11 +23,11 @@ learned.
 - Version 2 of the data was cleaned, deduplicated across all datasets and splits, length-filtered, hashed, and frozen.
 - The CARC training pipeline, reference cache, resume logic, Stage-1 reuse, progress logs, replay logs, and automated
   tests are implemented.
-- All five current methods were run for four task orders and two seeds on NVIDIA L40S GPUs: **40 completed runs**.
+- All six current methods were run for four task orders and two seeds on NVIDIA L40S GPUs: **48 completed runs**.
 - Notebook 07 reports the complete validation grid, paired uncertainty, per-dataset forgetting, final scores, and
   runtime.
 
-The five completed methods are:
+The six completed methods are:
 
 | Method | Meaning |
 |---|---|
@@ -36,10 +36,10 @@ The five completed methods are:
 | MFR 10% | Use the same budget for pairs with the largest historical margin drop. |
 | Random 14.3% | Use more random replay to test whether budget alone explains the result. |
 | Lowest margin | Replay pairs with the lowest current reference-relative margin. |
+| FMCR 10% | Forecast which pairs may cross a preference-failure boundary before the next refresh. |
 
-Forecasted Margin-Crossing Replay (FMCR) is implemented and awaiting evaluation. It forecasts which old preference
-pairs are likely to cross a failure boundary before the next buffer refresh and replays them before that happens.
-Balanced MFR and At-Risk MFR are planned separately and are **not implemented or evaluated yet**.
+Forecasted Margin-Crossing Replay (FMCR) is a completed ablation, not the main winning method. Balanced MFR and
+At-Risk MFR are planned separately and are **not implemented or evaluated yet**.
 
 ## Data
 
@@ -89,6 +89,7 @@ is better.
 | MFR 10% | -4.88 | 73.75 | 71.98 | 28.28 min |
 | Random 14.3% | -5.47 | 73.88 | 71.73 | 24.91 min |
 | Lowest margin | **-4.47** | **74.31** | **72.56** | 28.59 min |
+| FMCR 10% | -5.44 | **74.75** | 72.21 | 29.26 min |
 
 What these results support:
 
@@ -99,15 +100,72 @@ What these results support:
   interval was `[0.22, 1.09]`, while its final-task difference was small and uncertain.
 - **MFR also improves on higher-budget random replay.** It retained 0.59 points more and had a 0.25-point higher
   final average while using one-third fewer replay examples. MFR is slower because it must rescore the buffer.
-- **Lowest margin is currently the strongest method.** It has the best average retention, final-task score, and
-  final three-behavior score. Its final average is 0.58 points above MFR, with a paired interval that excludes zero.
+- **Lowest margin is currently the strongest overall method.** It has the best average retention and final
+  three-behavior score. Its final average is 0.58 points above MFR, with a paired interval that excludes zero. FMCR
+  has a slightly higher final current-task score, but retains earlier behaviors less effectively.
 - **The original MFR idea is promising but is not the final winner.** Historical margin decline contains useful
   information, but the current results show that present difficulty is a very strong replay signal.
+- **FMCR is a useful forecasting ablation with a mixed result.** It did not improve retention over Random 10%, but
+  it improved final-task accuracy by 1.12 points and the final three-behavior average by 0.50 points. Compared with
+  Lowest Margin, FMCR retained 0.97 points less and finished 0.35 points lower overall. Forecasting favored new-task
+  learning more than retention and did not replace the simpler current-difficulty signal.
 
 These are validation results from two seeds, not final test results. They support a controlled project conclusion,
-but not a broad claim that MFR is universally better. FMCR will test whether forecasting future failures is more
-useful than reacting to current difficulty. Balanced MFR and At-Risk MFR will separately test behavior allocation and
-actual current preference failure.
+but not a broad claim that MFR is universally better. Balanced MFR and At-Risk MFR will separately test behavior
+allocation and actual current preference failure.
+
+## How the results fit together
+
+The project is not simply a contest to make MFR win. The report tells a sequence of controlled findings:
+
+1. Sequential DPO causes real, non-uniform forgetting.
+2. A fixed amount of replay substantially reduces that forgetting.
+3. Historical margin decline is useful: MFR beats equal-budget Random 10% on retention and also beats higher-budget
+   random replay while using fewer examples.
+4. Present difficulty is even stronger in this setup: Lowest Margin currently gives the best retention and final
+   balance.
+5. Forecasting is not automatically better. FMCR improves current-task learning and the final average relative to
+   random replay, but its retention is similar to random and worse than Lowest Margin.
+6. Balanced MFR and At-Risk MFR are controlled ablations that will test whether allocation and actual policy failure
+   explain the remaining gap.
+
+This supports a broader contribution: a controlled study of **what an LLM should rehearse during continual
+preference tuning**, including positive and negative results, rather than an unsupported claim that one heuristic is
+always best.
+
+## What the datasets and task orders reveal
+
+All three datasets use the same basic preference format: a prompt, a chosen answer, and a rejected answer. They also
+use the same frozen split sizes and preprocessing. Helpfulness and general Quality overlap because both reward useful,
+well-written, instruction-following answers. Safety is more distinct: many examples reward refusing or safely
+redirecting harmful requests. This makes the three behaviors related, but not interchangeable.
+
+The measured forgetting reflects that difference:
+
+| Earlier behavior | No replay | Random 10% | MFR 10% | Lowest margin | FMCR 10% |
+|---|---:|---:|---:|---:|---:|
+| Helpful (6 cells) | -6.25 | -4.50 | -4.83 | -4.42 | **-4.17** |
+| Safe (6 cells) | -13.25 | -8.75 | -7.33 | **-6.67** | -8.58 |
+| Quality (4 cells) | -2.50 | -2.12 | **-1.25** | **-1.25** | -2.62 |
+
+Safety is the most fragile behavior and Quality is the most stable. A plausible explanation is that later helpfulness
+or quality tuning rewards broadly useful responses and can weaken refusal behavior, while helpfulness and quality
+share more response characteristics. This is an interpretation of the observed pattern, not yet a causal claim; the
+generation and error analyses must inspect actual responses.
+
+Average retention also changes by order:
+
+| Order | Sequence | No replay | MFR 10% | Lowest margin | FMCR 10% |
+|---:|---|---:|---:|---:|---:|
+| 1 | Helpful → Safe → Quality | -9.75 | -5.38 | **-5.12** | -5.75 |
+| 2 | Safe → Helpful → Quality | -13.00 | -9.25 | **-8.50** | -8.75 |
+| 3 | Quality → Helpful → Safe | -4.38 | -1.50 | **-1.25** | -3.12 |
+| 4 | Quality → Safe → Helpful | -4.62 | -3.38 | **-3.00** | -4.12 |
+
+Order 2 is hardest because Safety is learned first, is the most fragile behavior, and must survive two later stages.
+Orders 3 and 4 look easier partly because stable Quality is placed earlier while either Safety or Helpfulness is last
+and therefore cannot be measured as forgotten. The order averages therefore mix true sequence effects with which
+datasets are exposed to later training. The per-dataset table is the safer basis for behavior-level conclusions.
 
 ## Repository structure
 

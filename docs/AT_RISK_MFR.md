@@ -67,9 +67,9 @@ The comparison of Balanced MFR with At-Risk MFR isolates the value of the actual
 ### `src/mfr_replay.py`
 
 - Add `mfr_at_risk` to `METHODS` and `REFRESH_METHODS`.
-- Extend buffer state with at least `current_policy_margin`. Storing `peak_policy_margin` is recommended for analysis,
-  although selection does not require it.
-- Change buffer score updates so relative and absolute policy margins remain aligned by pair ID.
+- Reuse the existing `current_policy_margin` and trajectory fields added for FMCR. Storing `peak_policy_margin` is
+  optional for analysis; selection does not require it.
+- Reuse the existing aligned relative and absolute policy-margin score updates rather than creating parallel state.
 - Add a selector that applies equal behavior quotas, prioritizes `current_policy_margin <= 0`, and ranks by historical
   relative-margin drop within each tier.
 - Preserve deterministic tie-breaking and exact slot counts.
@@ -81,14 +81,14 @@ The comparison of Balanced MFR with At-Risk MFR isolates the value of the actual
 
 ### `src/mfr_dpo.py`
 
-The refresh currently keeps only `scores["margin"]`. Update it to pass both:
+The FMCR path already passes both score types to the replay buffer:
 
 ```text
 scores["margin"]
 scores["policy_margin"]
 ```
 
-to the replay buffer. Update the empty replay-log schema if new audit columns are added.
+Extend that tested mechanism to `mfr_at_risk` and update the empty replay-log schema if new audit columns are added.
 
 The existing Stage-1 `buffer.csv` files do not contain `current_policy_margin`. At-Risk MFR must therefore perform a
 live buffer scoring pass at the start of Stage 2, before its first replay plan is created. This scoring pass computes
@@ -97,9 +97,9 @@ invent, zero-fill, or infer the missing policy margin. Later refreshes follow th
 
 ### `scripts/run_experiment.py`
 
-`update_buffer()` also currently stores only the relative margin. Change both the just-learned candidate scoring and
-the older-buffer rescoring to retain aligned relative and policy margins. The saved `buffer.csv` must contain the
-new fields so interrupted jobs resume correctly.
+`update_buffer()` already stores aligned relative and policy margins for new candidates and has an FMCR path for
+updating the full forecast state. Extend the appropriate branch to `mfr_at_risk`. The saved `buffer.csv` must retain
+the required fields so interrupted jobs resume correctly.
 
 ### `configs/experiment_protocol.json`
 
@@ -122,7 +122,7 @@ Add tests proving that:
 - an old Stage-1 buffer without policy margins is scored before the first At-Risk replay selection;
 - no At-Risk replay plan can be created while required current policy margins are missing;
 - `needs_refresh("mfr_at_risk")` is true;
-- the existing five methods are unchanged.
+- the six completed methods are unchanged.
 
 Update `tests/test_budget.py`, `tests/test_replay.py`, `tests/test_carc.py`, and `tests/test_protocol.py` as needed.
 
@@ -136,9 +136,8 @@ Update `tests/test_budget.py`, `tests/test_replay.py`, `tests/test_carc.py`, and
 
 ## Stage-1 compatibility
 
-At-Risk MFR also changes replay and scoring-plumbing files included in the current full scientific-code hash. Apply
-the Stage-1-specific compatibility fingerprint described in `BALANCED_MFR.md` before trying to borrow existing
-Stage-1 checkpoints. Full resume validation must remain strict.
+The Stage-1-specific compatibility fingerprint described in `BALANCED_MFR.md` is already implemented and tested.
+Use it to borrow existing Stage-1 checkpoints, and keep full resume validation strict.
 
 Because this method adds buffer columns, do not resume a partial original-MFR run as At-Risk MFR. It must start at
 Stage 2 from the matching completed no-replay Stage-1 source and create its own run directory.
@@ -172,7 +171,7 @@ for order in 1 2 3 4; do
 done
 ```
 
-The original five methods do not need to be rerun if their common protocol is unchanged and compatibility checks
+The six completed methods do not need to be rerun if their common protocol is unchanged and compatibility checks
 pass.
 
 ## How to interpret the result
