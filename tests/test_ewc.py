@@ -1,5 +1,6 @@
 """LoRA-EWC math and persistence smoke test in a clean real-Torch subprocess."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -43,4 +44,17 @@ assert loaded[0]['pairs'] == 500 and loaded[0]['batch_size'] == 1
 assert torch.equal(loaded[0]['anchor']['lora_A_weight'], torch.tensor([1.0]))
 assert torch.equal(loaded[0]['fisher']['lora_A_weight'], torch.tensor([3.0]))
 """
-    subprocess.run([sys.executable, "-c", code], check=True, cwd=root)
+    # CARC login nodes limit how many threads a process may create.  NumPy/
+    # OpenBLAS can otherwise start a large thread pool while importing Torch,
+    # causing this tiny subprocess smoke test to fail before it reaches EWC.
+    env = os.environ.copy()
+    env.update({
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "NUMEXPR_NUM_THREADS": "1",
+        "VECLIB_MAXIMUM_THREADS": "1",
+        "BLIS_NUM_THREADS": "1",
+        "MALLOC_CONF": "background_thread:false",
+    })
+    subprocess.run([sys.executable, "-c", code], check=True, cwd=root, env=env)
