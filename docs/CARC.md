@@ -1,6 +1,6 @@
 # Running MFR-DPO on USC CARC
 
-> **Course-project branch.** This is the `project` branch, used in the CARC folder `/project2/xiangren_1987/group26`. Setup and every-session commands: [docs/PROJECT_FOLDER.md](PROJECT_FOLDER.md). The research paper uses the `complete` branch in `/project2/xiangren_1987/grp26-mfr-dpo`.
+> **Course-project branch.** This is the `project` branch, used in the CARC folder `/project2/xiangren_1987/group26`. Setup and every-session commands: [docs/PROJECT_FOLDER.md](PROJECT_FOLDER.md). The extended (more complex) version of the code is on the `complete` branch in `/project2/xiangren_1987/grp26-mfr-dpo`.
 
 > For the project folder, read `grp26-mfr-dpo` below as `group26` and use the every-session commands in PROJECT_FOLDER.md. Do not train in `group26`.
 

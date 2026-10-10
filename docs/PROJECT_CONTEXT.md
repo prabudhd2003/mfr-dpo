@@ -1,19 +1,13 @@
 # Course project (`project` branch, `group26`): full context
 
-Written 2026-10-10. This is the hand-off for the CSCI 544 **course project** track. The research-paper track
-(branch `complete`, CARC folder `grp26-mfr-dpo`) is separate and not described here beyond what is needed to keep
-the two apart.
+Written 2026-10-10. Hand-off for the CSCI 544 **course project** (branch `project`, CARC folder `group26`).
 
 ## Why the project branch exists
 
-The MFR-DPO work grew into a research paper aimed at ACL 2027 (ARR January cycle). The paper added FMCR, CPMR,
-DAPR (+ Weak / Gated / C variants), MIR-DPO, COPR-adapted, LoRA-EWC, a joint-training reference, 6 orders × 5
-seeds, a Llama-3.2-3B transfer grid, a locked test with two-look statistics, and a vLLM generation evaluation
-(WildGuard, IFEval, Prometheus). That is far more than the course project needs.
-
-So the course project was frozen at commit **`1ced1f4` ("updated docs", 2026-10-08)**. It is the last commit
-before FMCR and contains the core study only. The project adds just two methods on top: **At-Risk MFR** and
-**Balanced MFR**.
+The code kept growing on the `complete` branch into a much larger, more complex version (many more methods,
+orders, seeds, a second model and a larger evaluation). The course project does not need all of that, so it is
+frozen at commit **`1ced1f4` ("updated docs", 2026-10-08)**, which has the core study only. The project adds
+just two methods on top: **At-Risk MFR** and **Balanced MFR**.
 
 ## What `1ced1f4` contains
 
@@ -31,27 +25,27 @@ before FMCR and contains the core study only. The project adds just two methods 
 | Branch | Purpose | State |
 |---|---|---|
 | `project` | course project | created from `1ced1f4`; adds `docs/PROJECT_FOLDER.md` and notes in README / CARC.md |
-| `complete` | research paper | all research code; this is where research work continues |
-| `carc` | old research branch | untouched; the CARC research folder runs it until EWC finishes |
+| `complete` | extended version | the more complex version of the code |
+| `carc` | older branch | untouched |
 | `main` | original | untouched |
 
 `carc` was **not** rewound. The `project` branch was made instead, so no history was rewritten.
 
 ## Folders
 
-| | Course project | Research paper |
+| | Course project | Extended version |
 |---|---|---|
 | Laptop | `~/Desktop/CSCI544/project/group26` (branch `project`) | `~/Desktop/CSCI544/code/mfr-dpo` (branch `complete`) |
-| CARC | `/project2/xiangren_1987/group26` (branch `project`) | `/project2/xiangren_1987/grp26-mfr-dpo` (branch `carc`, switching to `complete` after EWC) |
+| CARC | `/project2/xiangren_1987/group26` (branch `project`) | `/project2/xiangren_1987/grp26-mfr-dpo` (branch `complete`) |
 | Artifacts | `/project2/xiangren_1987/group26/artifacts` | `/project2/xiangren_1987/grp26-mfr-dpo/artifacts` |
-| Conda env | symlink `group26/.conda/envs/mfr-dpo` → the research env | `/project2/xiangren_1987/grp26-mfr-dpo/.conda/envs/mfr-dpo` |
+| Conda env | symlink `group26/.conda/envs/mfr-dpo` → the extended env | `/project2/xiangren_1987/grp26-mfr-dpo/.conda/envs/mfr-dpo` |
 
-The research folder must **not be renamed**. The conda env inside it has hard-coded paths, and saved runs record
+The extended folder must **not be renamed**. The conda env inside it has hard-coded paths, and saved runs record
 absolute paths.
 
 ## CARC `group26/artifacts` contents
 
-- `cache/`: copied from the research artifacts.
+- `cache/`: copied from the extended artifacts.
 - `runs/`: 40 finished runs (`none`, `random`, `random_high`, `lowest_margin`, `mfr` × orders 1–4 × seeds 0–1),
   copied with `rsync`. 6.2 GB total. They were produced by code at or before `1ced1f4`, so the project
   notebook reads them unchanged.
@@ -98,10 +92,10 @@ done
 ## What is left for the course project
 
 1. **Implement At-Risk MFR and Balanced MFR** from their design docs, on the `project` branch. The `complete`
-   branch needs the same implementation if they are trained from the research folder, and the two
+   branch needs the same implementation if they are trained from the extended folder, and the two
    implementations must be identical.
 2. **Train them** on the 8 development cells: 2 methods × 8 = 16 runs, about 8 GPU-h. Plan: train in the
-   research folder, where the env and cache live, then copy:
+   extended folder, where the env and cache live, then copy:
    ```bash
    OLD=/project2/xiangren_1987/grp26-mfr-dpo/artifacts
    NEW=/project2/xiangren_1987/group26/artifacts
@@ -117,7 +111,4 @@ done
 
 ## Rules
 
-- The user makes all git commits and pushes; Claude only edits files.
 - Never run git commands in `grp26-mfr-dpo` while doing project work.
-- Don't install packages on the user's laptop without asking.
-- Test on CARC together before any GPU job.
