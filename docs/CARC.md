@@ -221,31 +221,21 @@ Stage-1 checkpoint. Do not edit or save tracked repository files while jobs are 
 finish, rerun notebook 07 from the beginning; its DAPR-Gated section reports gate activation by cell, stage, replay
 source, and interval.
 
-### Completed: LoRA-EWC coefficient sweep
+### Run the active LoRA-EWC coefficient sweep
 
 LoRA-EWC is a no-replay regularization baseline. After each behavior, it estimates a diagonal empirical Fisher from
 per-pair DPO-loss gradients on 500 frozen, method-independent training pairs and only the trainable LoRA parameters. Later stages add the standard
-multi-anchor EWC penalty. The three method names differ only in the frozen coefficient:
+multi-anchor EWC penalty. A loss-scale audit found that the earlier small diagnostic coefficients produced a
+negligible weighted penalty. They are not part of the active comparison. The three active method names differ only
+in the frozen coefficient:
 
 | Command name | EWC coefficient | Replay examples |
 |---|---:|---:|
-| `ewc_0_1` | 0.1 | 0 |
-| `ewc_1` | 1 | 0 |
-| `ewc_10` | 10 | 0 |
+| `ewc_100` | 100 | 0 |
+| `ewc_1000` | 1,000 | 0 |
+| `ewc_10000` | 10,000 | 0 |
 
-All three coefficients are complete on the eight development cells. Their results, ordered from most forgetting to
-least forgetting, are:
-
-| Method | Average retention change | Final current-task score | Final three-behavior average |
-|---|---:|---:|---:|
-| LoRA-EWC (λ = 1) | -7.97 | 74.75 | 70.77 |
-| No Replay | -7.94 | 74.81 | 70.77 |
-| LoRA-EWC (λ = 0.1) | -7.84 | 74.50 | 70.73 |
-| **LoRA-EWC (λ = 10)** | **-7.78** | 74.69 | **70.88** |
-
-The frozen development rule selects λ = 10 as the representative EWC setting, but it remains close to No Replay
-and prevents only about 2% of measured forgetting. Use the existing completed No-Replay run as the Stage-1
-checkpoint only when reproducing missing EWC artifacts. The command below is retained for that purpose:
+Use the existing completed No-Replay run as the Stage-1 checkpoint. Submit the full eight-cell sweep with:
 
 ```bash
 cd /project2/xiangren_1987/grp26-mfr-dpo
@@ -269,12 +259,12 @@ for order in 1 2 3 4; do
       --time 04:00:00 \
       --order "$order" \
       --seed "$seed" \
-      --methods ewc_0_1,ewc_1,ewc_10
+      --methods ewc_100,ewc_1000,ewc_10000
   done
 done
 ```
 
-This creates eight Slurm jobs and must not be run again while the completed artifacts are present. Each job runs the
+This creates eight Slurm jobs. Do not submit it a second time while jobs are queued or running. Each job runs the
 three coefficients sequentially on one L40S. The runner saves the
 Fisher diagonals and learned LoRA reference weights in `ewc_states.pt`, records the coefficient and Fisher settings
 in `settings.json`, writes the EWC loss to each stage's `history.csv`, and supports resuming at Stage 3. Do not call
@@ -285,7 +275,7 @@ Check completion with:
 ```bash
 for order in 1 2 3 4; do
   for seed in 0 1; do
-    for method in ewc_0_1 ewc_1 ewc_10; do
+    for method in ewc_100 ewc_1000 ewc_10000; do
       marker="$MFR_OUTPUT_DIR/runs/v2_o${order}_${method}_s${seed}/COMPLETE.json"
       if [[ -f "$marker" ]]; then
         echo "Order $order Seed $seed $method COMPLETE"
@@ -298,8 +288,8 @@ done
 ```
 
 Notebook 07 applies the frozen development rule: first require the final-task score to stay within 2 points of
-Random 10%, then prefer the highest final three-behavior average. It selects λ = 10 for unseen-seed confirmation.
-Before publication, verify from `history.csv` that the weighted EWC penalty was not negligible relative to DPO loss.
+Random 10%, then prefer the highest final three-behavior average. Before selecting a coefficient, verify from
+`history.csv` that the weighted EWC penalty is material relative to the DPO loss and check for training instability.
 
 ### Completed: offline joint-training reference
 

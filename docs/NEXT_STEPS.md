@@ -2,7 +2,7 @@
 
 ## 1. Current result: DAPR is the provisional development winner
 
-The full 16-method, eight-cell development grid is complete. The selected DAPR setting uses Lowest Margin retrieval
+The current 13-method headline grid is complete across eight development cells. The selected DAPR setting uses Lowest Margin retrieval
 and a one-sided learned-state token anchor with `anchor_strength = 0.01`. Its internal method name is `dapr_weak`,
 but the paper and figures call it **DAPR (α = 0.01)**. The old identifier remains in code and artifacts so the
 completed runs stay reproducible.
@@ -12,10 +12,7 @@ forgetting; values near zero or above zero mean stronger retention.
 
 | Method | Average retention change | Final current-task score | Final three-behavior average | Runtime |
 |---|---:|---:|---:|---:|
-| LoRA-EWC (λ = 1) | -7.97 | 74.75 | 70.77 | 23.80 min |
 | No Replay | -7.94 | 74.81 | 70.77 | 22.48 min |
-| LoRA-EWC (λ = 0.1) | -7.84 | 74.50 | 70.73 | 23.81 min |
-| LoRA-EWC (λ = 10) | -7.78 | 74.69 | 70.88 | 23.86 min |
 | Random 10% | -5.50 | 73.62 | 71.71 | 24.28 min |
 | Random 14.3% | -5.47 | 73.88 | 71.73 | 24.91 min |
 | FMCR | -5.44 | 74.75 | 72.21 | 29.26 min |
@@ -81,26 +78,16 @@ of 0.67. CPMR and Random 10% overlap by only 0.04. CPMR therefore often agrees w
 while making a clearly targeted, non-random modification. The main drawback is computation: its reversible
 lookahead raises mean runtime by about 20 minutes relative to Lowest Margin.
 
-## 3. Completed LoRA-EWC development sweep
+## 3. Run the active LoRA-EWC development sweep
 
-LoRA-EWC was run at coefficients 0.1, 1, and 10 on all eight development cells. This table is again ordered from
-most forgetting to least forgetting:
+The loss-scale audit showed that the earlier small diagnostic coefficients gave weighted EWC-to-DPO loss ratios
+of only about 0.001% to 0.11%. Those settings are therefore excluded from the headline comparison. The active,
+predeclared sweep is **100, 1,000, and 10,000** on all eight development cells.
 
-| Method | Average retention change | Final current-task score | Final three-behavior average |
-|---|---:|---:|---:|
-| LoRA-EWC (λ = 1) | -7.97 | 74.75 | 70.77 |
-| No Replay | -7.94 | 74.81 | 70.77 |
-| LoRA-EWC (λ = 0.1) | -7.84 | 74.50 | 70.73 |
-| **LoRA-EWC (λ = 10)** | **-7.78** | 74.69 | **70.88** |
-
-The frozen coefficient rule selects λ = 10 as the representative EWC setting, but the scientific result is
-negative: it improves retention by only 0.16 points and final average by only 0.10 points over No Replay. It passes
-zero of eight cells under the replay-method success rule. DAPR improves retention by 5.84 points and final average
-by 2.56 points over EWC λ = 10, so generic LoRA parameter protection does not explain DAPR's gain.
-
-Before publication, inspect the saved `ewc_loss` values and verify that `coefficient × ewc_loss` was not negligible
-relative to the DPO loss. If λ = 10 produced a material penalty, report EWC as a valid negative baseline. If not,
-perform a documented higher-scale diagnostic before making a strong claim about EWC.
+For each setting, report retention, final current-task score, final three-behavior average, runtime, and the observed
+weighted-EWC-to-DPO loss ratio. A coefficient is eligible only if its final-task score is within 2 points of Random
+10%. Among eligible settings, select the one with the highest final average. Also inspect the histories for exploding
+losses or other instability before freezing the representative EWC baseline.
 
 ## 4. Finish Balanced MFR and At-Risk MFR
 
@@ -276,7 +263,7 @@ six orders. DAPR with α = 0.01 is the current provisional winner. At minimum in
 - Random 10%;
 - original MFR;
 - lowest margin;
-- LoRA-EWC with the selected representative coefficient λ = 10;
+- LoRA-EWC with the representative coefficient selected from 100, 1,000, and 10,000;
 - the selected final method.
 
 Do not select a different method after seeing the confirmation results. More independent seeds are more valuable
@@ -327,8 +314,8 @@ The final report should clearly separate:
 A defensible final contribution is a controlled study of which preference pairs should be replayed during continual
 DPO. The current evidence supports a progression from historical forgetting, to present difficulty, to
 counterfactual interference from the actual upcoming updates, and finally the objective used to preserve selected
-pairs. DAPR has the strongest observed stability–plasticity balance and already clearly beats the selected LoRA-EWC
-baseline on development validation. It must still hold up on unseen seeds, generation evaluation, and the locked
+pairs. DAPR has the strongest observed stability–plasticity balance. It must still be compared with the active
+higher-scale LoRA-EWC sweep and hold up on unseen seeds, generation evaluation, and the locked
 test before it is presented as a reliable win.
 
 ## Completion checklist
@@ -340,9 +327,9 @@ test before it is presented as a reliable win.
 - [x] FMCR run and analyzed in all eight cells
 - [x] Original seven-method validation and CPMR mechanism analysis complete
 - [x] DAPR variants, MIR-DPO, and COPR-adapted run and analyzed in all eight cells
-- [x] LoRA-EWC coefficients implemented and tested
-- [x] LoRA-EWC coefficients 0.1, 1, and 10 run in all eight cells
-- [x] LoRA-EWC λ = 10 selected as the representative confirmation baseline
+- [x] Higher-scale LoRA-EWC coefficients 100, 1,000, and 10,000 implemented and tested
+- [ ] LoRA-EWC coefficients 100, 1,000, and 10,000 run in all eight cells
+- [ ] Representative LoRA-EWC coefficient selected with the frozen rule
 - [x] Offline joint-training reference implemented and tested
 - [x] Joint-training Seeds 0–4 run and analyzed
 - [ ] Balanced MFR and At-Risk MFR added to the full analysis

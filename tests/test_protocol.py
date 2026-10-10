@@ -18,7 +18,7 @@ def test_protocol_uses_exact_ten_percent_replay():
     assert "cpmr" in protocol["secondary_methods"]
     assert {
         "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
-        "ewc_0_1", "ewc_1", "ewc_10",
+        "ewc_100", "ewc_1000", "ewc_10000",
     } <= set(protocol["secondary_methods"])
     assert protocol["orders"]["3"] == ["quality", "helpful", "safe"]
     assert protocol["orders"]["4"] == ["quality", "safe", "helpful"]
@@ -27,12 +27,12 @@ def test_protocol_uses_exact_ten_percent_replay():
     assert method_anchor_strength(protocol, "dapr") == 0.1
     assert method_anchor_strength(protocol, "dapr_weak") == 0.01
     assert method_anchor_strength(protocol, "dapr_gated") == 0.1
-    assert method_old_per_step(protocol, "ewc_0_1") == 0
-    assert method_old_per_step(protocol, "ewc_1") == 0
-    assert method_old_per_step(protocol, "ewc_10") == 0
-    assert method_ewc_coefficient(protocol, "ewc_0_1") == 0.1
-    assert method_ewc_coefficient(protocol, "ewc_1") == 1.0
-    assert method_ewc_coefficient(protocol, "ewc_10") == 10.0
+    assert method_old_per_step(protocol, "ewc_100") == 0
+    assert method_old_per_step(protocol, "ewc_1000") == 0
+    assert method_old_per_step(protocol, "ewc_10000") == 0
+    assert method_ewc_coefficient(protocol, "ewc_100") == 100.0
+    assert method_ewc_coefficient(protocol, "ewc_1000") == 1000.0
+    assert method_ewc_coefficient(protocol, "ewc_10000") == 10000.0
     assert protocol["ewc_fisher_pairs"] == 500
     assert protocol["ewc_fisher_batch_size"] == 1
     assert protocol["joint_seeds"] == [0, 1, 2, 3, 4]

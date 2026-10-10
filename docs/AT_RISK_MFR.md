@@ -2,10 +2,10 @@
 
 ## Current project status
 
-This remains a planned development ablation and has not yet been evaluated. In the completed 16-method grid,
+This remains a planned development ablation and has not yet been evaluated. In the completed headline grid,
 original MFR retains better than equal-budget Random 10% but trails Lowest Margin, while DAPR with α = 0.01 gives
-the best observed stability–plasticity balance. LoRA-EWC at coefficients 0.1, 1, and 10 behaves close to No Replay,
-and the five-seed joint-training reference reaches 73.20 mean final accuracy. At-Risk MFR must be evaluated on the
+the best observed stability–plasticity balance. A higher-scale LoRA-EWC sweep is pending, and the five-seed
+joint-training reference reaches 73.20 mean final accuracy. At-Risk MFR must be evaluated on the
 same four orders and two development seeds before any final method is frozen.
 
 At-Risk MFR is the risk-aware MFR variant. Use the method name:

@@ -3,7 +3,7 @@
 The active workflow runs training through CARC terminal jobs, not notebooks.
 
 - `01_carc_status.ipynb` checks the local data, reference cache, and completed CARC runs.
-- `07_compare_runs.ipynb` builds the complete 16-method sequential validation tables and figures from the CARC
+- `07_compare_runs.ipynb` builds the current headline sequential validation tables and figures from the CARC
   artifact directory. It includes all orders and seeds, paired uncertainty, replay-selection overlap,
   concentration, behavior allocation, runtime, CPMR projection diagnostics, DAPR diagnostics, and the LoRA-EWC
   coefficient comparison.

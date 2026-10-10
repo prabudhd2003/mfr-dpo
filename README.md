@@ -28,8 +28,8 @@ more likely—while allowing movement in the helpful direction. This separates r
 - Version 2 of the data was cleaned, deduplicated across all datasets and splits, length-filtered, hashed, and frozen.
 - The CARC training pipeline, reference cache, resume logic, Stage-1 reuse, progress logs, replay logs, and automated
   tests are implemented.
-- Sixteen sequential methods were run for four task orders and two seeds on NVIDIA L40S GPUs: **128 completed
-  development runs**. Five additional offline joint-training runs were completed for Seeds 0–4.
+- Thirteen sequential methods were run for four task orders and two seeds on NVIDIA L40S GPUs: **104 completed
+  headline development runs**. Five additional offline joint-training runs were completed for Seeds 0–4.
 - Notebook 07 reports the complete validation grid, paired uncertainty, per-dataset forgetting, replay-selection
   overlap, concentration, final scores, and runtime.
 
@@ -74,11 +74,11 @@ because that name was fixed before the run and is embedded in 8 completed run fo
 hashes. Renaming those artifacts would weaken reproducibility. In figures, `dapr_weak` is displayed as
 **DAPR (α = 0.01)**, while the original α = 0.1 setting is **DAPR-Strong**.
 
-LoRA-EWC was evaluated as a no-replay regularization baseline under `ewc_0_1`, `ewc_1`, and `ewc_10`. It estimates
-a diagonal Fisher from per-pair DPO-loss gradients on 500 examples and regularizes only trainable LoRA weights.
-All three settings behaved almost like No Replay. The frozen development rule selects **λ = 10** as the representative
-EWC setting because it has the highest final average of the three, not because EWC is competitive. Before treating
-this as a negative result in the paper, the weighted EWC penalty must be checked against the DPO-loss scale.
+LoRA-EWC is being evaluated as a no-replay regularization baseline. It estimates a diagonal Fisher from per-pair
+DPO-loss gradients on 500 examples and regularizes only trainable LoRA weights. The active coefficient sweep is
+**100, 1,000, and 10,000**. These values were chosen after a scale audit showed that smaller diagnostic settings
+made the weighted EWC penalty negligible relative to the DPO loss. EWC will enter the results only after all three
+new settings finish across the eight development cells.
 Balanced MFR and At-Risk MFR remain separate planned ablations.
 
 An order-independent **joint-training reference** is also complete. It combines all 6,000 frozen training pairs
@@ -136,10 +136,7 @@ training. Less negative is better. All changes are **percentage-point changes**,
 
 | Method | Average forgetting | Forgetting prevented vs no replay | Final average accuracy | Change vs no replay |
 |---|---:|---:|---:|---:|
-| LoRA-EWC (λ = 1) | -7.97 | about **-0.4%** | 70.77 | -0.03 retention, -0.00 final |
 | No replay | -7.94 | — | 70.77 | — |
-| LoRA-EWC (λ = 0.1) | -7.84 | about **1%** | 70.73 | +0.09 retention, -0.04 final |
-| LoRA-EWC (λ = 10) | -7.78 | about **2%** | 70.88 | +0.16 retention, +0.10 final |
 | Random 10% | -5.50 | about **31%** | 71.71 | +2.44 retention, +0.94 final |
 | Random 14.3% | -5.47 | about **31%** | 71.73 | +2.47 retention, +0.96 final |
 | FMCR 10% | -5.44 | about **31%** | 72.21 | +2.50 retention, +1.44 final |
@@ -163,7 +160,6 @@ DAPR-C and COPR-adapted show that very strong stability can come at the cost of 
 
 In simple terms:
 
-- LoRA-EWC prevents at most approximately **2% of the forgetting** and is effectively similar to No Replay.
 - Random 10% prevents approximately **31% of the forgetting**.
 - Random 14.3% also prevents approximately **31% of the forgetting** despite using more replay examples.
 - FMCR prevents approximately **31% of the forgetting** and favors final-task learning more than retention.
@@ -245,15 +241,15 @@ What these results support:
   between the strong and selected settings. The coefficient is therefore scientifically important.
 - **COPR-adapted is a useful negative result.** It sharply reduces forgetting but lowers the final average below No
   Replay. It shows that preserving an old pair distribution too rigidly is not enough; plasticity must be measured.
-- **LoRA-EWC does not explain DAPR's gain.** Coefficients 0.1, 1, and 10 all perform close to No Replay. The selected
-  representative setting, λ = 10, prevents only about 2% of measured forgetting and reaches a 70.88 final average.
+- **The LoRA-EWC comparison is not yet final.** The active coefficient sweep is 100, 1,000, and 10,000; results
+  will be added only after every setting finishes all eight development cells.
 - **Joint training is a useful offline reference.** It reaches a 73.20 average over five seeds. On matched Seeds 0
   and 1 it reaches 74.00, only 0.56 points above DAPR's four-order average, although this is a descriptive rather
   than a formal paired comparison.
 
 These are development-validation results from two seeds, not final test results. They support a controlled project
-conclusion, but not a broad claim that DAPR is universally better. LoRA-EWC did not reproduce DAPR's gain, while
-the joint-access reference shows that DAPR is close to simultaneous-data training on matched seeds. Balanced MFR
+conclusion, but not a broad claim that DAPR is universally better. The joint-access reference shows that DAPR is
+close to simultaneous-data training on matched seeds. Balanced MFR
 and At-Risk MFR will separately test behavior allocation and actual current preference failure. Unseen seeds must
 confirm the frozen method before the locked test.
 
@@ -275,8 +271,7 @@ The project is not simply a contest to make MFR win. The report tells a sequence
    much better retention–plasticity balance than Lowest Margin.
 8. Stronger is not automatically better: DAPR-Strong, DAPR-C, and COPR-adapted protect old behavior more strongly
    but suppress new-task learning. DAPR-Gated is intermediate.
-9. Ordinary LoRA-EWC does not materially prevent forgetting at the tested coefficients, so DAPR's gain is not
-   reproduced by generic parameter protection.
+9. The higher-scale LoRA-EWC sweep will test whether generic LoRA parameter protection can reproduce DAPR's gain.
 10. Joint training reaches 73.20 average over five seeds. DAPR is close on matched seeds despite facing sequential
     access and using only a 10% replay budget.
 11. Balanced MFR and At-Risk MFR remain controlled selection ablations for allocation and current preference failure.

@@ -19,7 +19,7 @@ MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 ANCHOR_METHODS = (
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted",
 )
-EWC_METHODS = ("ewc_0_1", "ewc_1", "ewc_10")
+EWC_METHODS = ("ewc_100", "ewc_1000", "ewc_10000")
 # Diagnostics that describe the anchors actually applied. They are averaged over anchored
 # replay pairs only, so DAPR-Gated's gated-off occurrences cannot dilute them.
 ANCHORED_RATE_KEYS = (

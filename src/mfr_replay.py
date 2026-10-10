@@ -21,9 +21,9 @@ The methods differ in which stored pairs fill the replay slots of each training 
     dapr_c          DAPR with common-shift-centred token anchoring
     mir_dpo         largest one-step increase in old-pair DPO loss (MIR adapted to DPO)
     copr_adapted    lowest-margin replay plus a peak pair-distribution constraint
-    ewc_0_1         no replay; LoRA-EWC parameter regularization with coefficient 0.1
-    ewc_1           no replay; LoRA-EWC parameter regularization with coefficient 1
-    ewc_10          no replay; LoRA-EWC parameter regularization with coefficient 10
+    ewc_100         no replay; LoRA-EWC parameter regularization with coefficient 100
+    ewc_1000        no replay; LoRA-EWC parameter regularization with coefficient 1,000
+    ewc_10000       no replay; LoRA-EWC parameter regularization with coefficient 10,000
 
 Everything here is CPU-only and fully seeded: which pairs enter the buffer depends on the run seed
 and the dataset, never on the method, so every method stores exactly the same candidate pairs.
@@ -37,9 +37,9 @@ from mfr_utils import buffer_seed
 METHODS = (
     "none", "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr",
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
-    "ewc_0_1", "ewc_1", "ewc_10",
+    "ewc_100", "ewc_1000", "ewc_10000",
 )
-REGULARIZATION_METHODS = ("ewc_0_1", "ewc_1", "ewc_10")
+REGULARIZATION_METHODS = ("ewc_100", "ewc_1000", "ewc_10000")
 REFRESH_METHODS = (
     "lowest_margin", "mfr", "fmcr", "cpmr", "dapr", "dapr_weak", "dapr_gated",
     "dapr_c", "mir_dpo", "copr_adapted",

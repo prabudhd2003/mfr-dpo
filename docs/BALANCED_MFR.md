@@ -2,7 +2,7 @@
 
 ## Current project status
 
-This remains a planned development ablation and has not yet been evaluated. The completed 16-method grid shows
+This remains a planned development ablation and has not yet been evaluated. The completed headline grid shows
 average retention changes of -7.94 for No Replay, -5.50 for Random 10%, -4.88 for original MFR, -4.47 for Lowest
 Margin, -4.28 for CPMR, and -1.94 for the selected DAPR setting. The offline joint-training reference is also
 complete at 73.20 mean final accuracy across five seeds. Balanced MFR must be compared on the same four orders and

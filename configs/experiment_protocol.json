@@ -22,9 +22,9 @@
     "dapr_c",
     "mir_dpo",
     "copr_adapted",
-    "ewc_0_1",
-    "ewc_1",
-    "ewc_10"
+    "ewc_100",
+    "ewc_1000",
+    "ewc_10000"
   ],
   "seeds": [0, 1],
   "joint_seeds": [0, 1, 2, 3, 4],
@@ -42,9 +42,9 @@
   "old_per_step": 2,
   "old_per_step_overrides": {
     "random_high": 3,
-    "ewc_0_1": 0,
-    "ewc_1": 0,
-    "ewc_10": 0
+    "ewc_100": 0,
+    "ewc_1000": 0,
+    "ewc_10000": 0
   },
   "micro_batch": 2,
   "buffer_size": 500,
@@ -60,9 +60,9 @@
   "dapr_huber_delta": 1.0,
   "mir_lookahead_steps": 1,
   "ewc_coefficients": {
-    "ewc_0_1": 0.1,
-    "ewc_1": 1.0,
-    "ewc_10": 10.0
+    "ewc_100": 100.0,
+    "ewc_1000": 1000.0,
+    "ewc_10000": 10000.0
   },
   "ewc_fisher_pairs": 500,
   "ewc_fisher_batch_size": 1,
