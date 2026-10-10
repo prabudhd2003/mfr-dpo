@@ -3,9 +3,12 @@
 The active workflow runs training through CARC terminal jobs, not notebooks.
 
 - `01_carc_status.ipynb` checks the local data, reference cache, and completed CARC runs.
-- `07_compare_runs.ipynb` builds the complete seven-method validation tables and figures from the CARC artifact
-  directory. It includes all orders and seeds, paired uncertainty, replay-selection overlap, concentration,
-  behavior allocation, runtime, and CPMR projection diagnostics.
+- `07_compare_runs.ipynb` builds the complete 16-method sequential validation tables and figures from the CARC
+  artifact directory. It includes all orders and seeds, paired uncertainty, replay-selection overlap,
+  concentration, behavior allocation, runtime, CPMR projection diagnostics, DAPR diagnostics, and the LoRA-EWC
+  coefficient comparison.
+- `08_joint_baseline.ipynb` analyzes the completed five-seed offline joint-training reference. Joint training has
+  final behavior scores but no forgetting score because it is not sequential.
 - `colab/` preserves the previous Colab notebooks and their outputs. They are historical and should not be used to launch the new experiment grid.
 
 Before opening an active notebook on CARC, set the artifact directory in the terminal that starts Jupyter:

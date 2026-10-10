@@ -137,7 +137,7 @@ One group job runs the requested methods sequentially for one order and seed. Th
 | 3 | Quality → Helpful → Safe |
 | 4 | Quality → Safe → Helpful |
 
-The seven-method grid—No Replay, Random 10%, original MFR, Random 14.3%, Lowest Margin, FMCR, and CPMR—is complete
+The original seven-method grid—No Replay, Random 10%, original MFR, Random 14.3%, Lowest Margin, FMCR, and CPMR—is complete
 for all four orders and both seeds: 56 runs in total. Do not submit those completed combinations again. Their
 checkpoints and results are under `$MFR_OUTPUT_DIR/runs`.
 
@@ -145,10 +145,11 @@ CPMR performs reversible virtual training and averaged 48.75 minutes per run, co
 Lowest Margin. It should remain available as a completed baseline, but it does not need to be resubmitted for seeds
 0 and 1.
 
-### Run DAPR, DAPR-C, MIR-DPO, and COPR-adapted
+### Completed: DAPR, DAPR-C, MIR-DPO, and COPR-adapted
 
 These four methods are implemented under the exact command names `dapr`, `dapr_c`, `mir_dpo`, and
-`copr_adapted`. Submit all four for every order and seed with:
+`copr_adapted`. Their eight development cells are complete. The command below is retained only for reproduction or
+recovery of missing artifacts; do not resubmit completed run folders.
 
 ```bash
 for order in 1 2 3 4; do
@@ -166,7 +167,7 @@ done
 ```
 
 This submits eight Slurm jobs. Each job runs its four methods sequentially on one L40S. It reuses the matching
-completed No-Replay Stage-1 checkpoint and does not rerun the seven completed methods. If the queue or four-hour
+completed No-Replay Stage-1 checkpoint and does not rerun the original seven completed methods. If the queue or four-hour
 limit becomes a problem, submit one method at a time by changing `--methods`, for example:
 
 ```bash
@@ -184,7 +185,7 @@ Do not submit the same order–seed–method combination twice. A failed group j
 are skipped and an incomplete run resumes from its first unfinished stage. MIR-DPO may be the slowest of these four
 because every refresh scores the buffer before and after a reversible virtual update.
 
-### Run DAPR-Weak and DAPR-Gated
+### Completed: DAPR α = 0.01 and DAPR-Gated
 
 These development variants are configured as `dapr_weak` and `dapr_gated`. DAPR-Weak changes only the directional
 anchor strength from 0.1 to 0.01. DAPR-Gated keeps strength 0.1 and performs an eval-mode, no-gradient live margin
@@ -197,8 +198,8 @@ better than Random 10% and its final-task accuracy is no more than 2 points belo
 passing cells first, then the final three-behavior average, with retention and per-behavior acquisition/final scores
 reported alongside it. If one variant is selected from seeds 0–1, freeze it before confirming on seeds 2–4.
 
-After the currently running jobs finish, commit and push the new code, pull it on CARC, and verify that
-`git status --short` prints nothing. Then submit only the two new variants:
+Both variants are complete in all eight development cells. The command below is retained for reproduction. Before
+using it, verify that `git status --short` prints nothing and do not resubmit completed combinations.
 
 ```bash
 for order in 1 2 3 4; do
@@ -220,7 +221,7 @@ Stage-1 checkpoint. Do not edit or save tracked repository files while jobs are 
 finish, rerun notebook 07 from the beginning; its DAPR-Gated section reports gate activation by cell, stage, replay
 source, and interval.
 
-### Run the LoRA-EWC coefficient sweep
+### Completed: LoRA-EWC coefficient sweep
 
 LoRA-EWC is a no-replay regularization baseline. After each behavior, it estimates a diagonal empirical Fisher from
 per-pair DPO-loss gradients on 500 frozen, method-independent training pairs and only the trainable LoRA parameters. Later stages add the standard
@@ -232,8 +233,19 @@ multi-anchor EWC penalty. The three method names differ only in the frozen coeff
 | `ewc_1` | 1 | 0 |
 | `ewc_10` | 10 | 0 |
 
-Use the existing completed No-Replay run as the Stage-1 checkpoint. Submit all three coefficients on each of the
-eight development cells:
+All three coefficients are complete on the eight development cells. Their results, ordered from most forgetting to
+least forgetting, are:
+
+| Method | Average retention change | Final current-task score | Final three-behavior average |
+|---|---:|---:|---:|
+| LoRA-EWC (λ = 1) | -7.97 | 74.75 | 70.77 |
+| No Replay | -7.94 | 74.81 | 70.77 |
+| LoRA-EWC (λ = 0.1) | -7.84 | 74.50 | 70.73 |
+| **LoRA-EWC (λ = 10)** | **-7.78** | 74.69 | **70.88** |
+
+The frozen development rule selects λ = 10 as the representative EWC setting, but it remains close to No Replay
+and prevents only about 2% of measured forgetting. Use the existing completed No-Replay run as the Stage-1
+checkpoint only when reproducing missing EWC artifacts. The command below is retained for that purpose:
 
 ```bash
 cd /project2/xiangren_1987/grp26-mfr-dpo
@@ -262,7 +274,8 @@ for order in 1 2 3 4; do
 done
 ```
 
-This creates eight Slurm jobs. Each job runs the three coefficients sequentially on one L40S. The runner saves the
+This creates eight Slurm jobs and must not be run again while the completed artifacts are present. Each job runs the
+three coefficients sequentially on one L40S. The runner saves the
 Fisher diagonals and learned LoRA reference weights in `ewc_states.pt`, records the coefficient and Fisher settings
 in `settings.json`, writes the EWC loss to each stage's `history.csv`, and supports resuming at Stage 3. Do not call
 any coefficient the winner until all 24 runs are complete and notebook 07 has compared the same eight cells.
@@ -284,19 +297,28 @@ for order in 1 2 3 4; do
 done
 ```
 
-Then rerun notebook 07 from the top. Choose one coefficient using the frozen development rule: first require the
-final-task score to stay within 2 points of Random 10%, then prefer the highest final three-behavior average, with
-retention and consistency across cells reported alongside it. Freeze that coefficient before unseen-seed runs.
+Notebook 07 applies the frozen development rule: first require the final-task score to stay within 2 points of
+Random 10%, then prefer the highest final three-behavior average. It selects λ = 10 for unseen-seed confirmation.
+Before publication, verify from `history.csv` that the weighted EWC penalty was not negligible relative to DPO loss.
 
-### Run the offline joint-training reference
+### Completed: offline joint-training reference
 
 Joint training is deliberately separate from the sequential methods. Each run globally shuffles all 6,000 frozen
 training pairs (2,000 Helpful, 2,000 Safe, and 2,000 Quality), trains a fresh adapter for one pass, and evaluates all
 three validation sets. It has no task order and receives no forgetting score. Outputs go under
 `$MFR_OUTPUT_DIR/joint_runs/`, so notebook 07 cannot accidentally treat them as continual runs.
 
-Wait for any already-submitted experiments to finish before pulling this implementation into the shared CARC
-checkout. Then run the tests and submit Seeds 0–4:
+Seeds 0–4 are complete. Their final validation summary is:
+
+| Behavior | Mean accuracy | Seed standard deviation |
+|---|---:|---:|
+| Helpful | 66.70 | 1.96 |
+| Safe | 80.70 | 1.52 |
+| Quality | 72.20 | 0.91 |
+| **Three-behavior average** | **73.20** | **0.99** |
+
+The commands below are retained for reproduction or recovery of missing joint artifacts. Do not submit them again
+while the five completed folders are present.
 
 ```bash
 cd /project2/xiangren_1987/grp26-mfr-dpo
@@ -321,7 +343,7 @@ for seed in 0 1 2 3 4; do
 done
 ```
 
-This submits five independent L40S jobs. Check them with:
+This submits five independent L40S jobs. Check existing or reproduced runs with:
 
 ```bash
 squeue --me --format="%.18i %.20j %.2t %.10M %.30R"
@@ -336,8 +358,8 @@ for seed in 0 1 2 3 4; do
 done
 ```
 
-After all five finish, run notebook 08. Compare final Helpful, Safe, Quality, and three-behavior average scores, but
-do not report retention for joint training because no behavior is learned in a separate earlier stage.
+Notebook 08 reports final Helpful, Safe, Quality, and three-behavior average scores. Do not report retention for
+joint training because no behavior is learned in a separate earlier stage.
 
 After Balanced MFR is implemented and configured as `mfr_balanced`, run only that new method across all eight cells:
 
@@ -373,7 +395,7 @@ for order in 1 2 3 4; do
 done
 ```
 
-The existing completed `none` run supplies the matching Stage-1 checkpoint. Do not rerun the seven completed methods
+The existing completed `none` run supplies the matching Stage-1 checkpoint. Do not rerun the original seven completed methods
 just because a new replay method is added. The runner now checks a separate Stage-1 compatibility fingerprint, so a
 replay-only extension can reuse the completed checkpoint while a real Stage-1 training change is still rejected.
 

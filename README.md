@@ -28,8 +28,8 @@ more likely—while allowing movement in the helpful direction. This separates r
 - Version 2 of the data was cleaned, deduplicated across all datasets and splits, length-filtered, hashed, and frozen.
 - The CARC training pipeline, reference cache, resume logic, Stage-1 reuse, progress logs, replay logs, and automated
   tests are implemented.
-- Thirteen methods were run for four task orders and two seeds on NVIDIA L40S GPUs: **104 completed development
-  runs**.
+- Sixteen sequential methods were run for four task orders and two seeds on NVIDIA L40S GPUs: **128 completed
+  development runs**. Five additional offline joint-training runs were completed for Seeds 0–4.
 - Notebook 07 reports the complete validation grid, paired uncertainty, per-dataset forgetting, replay-selection
   overlap, concentration, final scores, and runtime.
 
@@ -74,17 +74,23 @@ because that name was fixed before the run and is embedded in 8 completed run fo
 hashes. Renaming those artifacts would weaken reproducibility. In figures, `dapr_weak` is displayed as
 **DAPR (α = 0.01)**, while the original α = 0.1 setting is **DAPR-Strong**.
 
-LoRA-EWC is implemented as a no-replay regularization baseline under `ewc_0_1`, `ewc_1`, and `ewc_10`. It estimates
+LoRA-EWC was evaluated as a no-replay regularization baseline under `ewc_0_1`, `ewc_1`, and `ewc_10`. It estimates
 a diagonal Fisher from per-pair DPO-loss gradients on 500 examples and regularizes only trainable LoRA weights.
-These three coefficient settings have not been evaluated yet. They will be compared on the same eight development cells; one
-coefficient will then be frozen before unseen-seed confirmation. Balanced MFR and At-Risk MFR remain separate
-planned ablations and are intentionally left to their existing specifications.
+All three settings behaved almost like No Replay. The frozen development rule selects **λ = 10** as the representative
+EWC setting because it has the highest final average of the three, not because EWC is competitive. Before treating
+this as a negative result in the paper, the weighted EWC penalty must be checked against the DPO-loss scale.
+Balanced MFR and At-Risk MFR remain separate planned ablations.
 
-An order-independent **joint-training reference** is also implemented. It combines all 6,000 frozen training pairs
+An order-independent **joint-training reference** is also complete. It combines all 6,000 frozen training pairs
 (2,000 per behavior), performs one global seed-controlled shuffle, and trains one fresh adapter for one pass with
-the same QLoRA and DPO settings. It is configured for Seeds 0–4 and writes to `artifacts/joint_runs/`, separately
+the same QLoRA and DPO settings. Seeds 0–4 are stored in `artifacts/joint_runs/`, separately
 from continual runs so it is never assigned a forgetting score. This reference asks how well the three behaviors
 can be learned when all training data remain simultaneously available; it is not a continual-learning method.
+
+Across its five seeds, joint training reaches **66.7 Helpful, 80.7 Safe, 72.2 Quality, and 73.20 average** validation
+accuracy. On the directly matched Seeds 0 and 1, its average is 74.00, compared with 73.44 for DAPR averaged over the
+four task orders. This 0.56-point descriptive gap is encouraging, but joint and sequential runs are different
+experimental units, so it is not a formal superiority test.
 
 ## Data
 
@@ -124,25 +130,28 @@ A value near zero is better. A negative value means the model forgot some of tha
 
 ## Current validation results
 
-The following table averages all eight order–seed cells. “Average forgetting” is the change in an earlier behavior
-between the point when it was learned and the end of training. Less negative is better. All changes in the table are
-**percentage-point changes**, not relative percentages.
+The following table averages all eight order–seed cells and is ordered from **most forgetting to least forgetting**.
+“Average forgetting” is the change in an earlier behavior between the point when it was learned and the end of
+training. Less negative is better. All changes are **percentage-point changes**, not relative percentages.
 
 | Method | Average forgetting | Forgetting prevented vs no replay | Final average accuracy | Change vs no replay |
 |---|---:|---:|---:|---:|
+| LoRA-EWC (λ = 1) | -7.97 | about **-0.4%** | 70.77 | -0.03 retention, -0.00 final |
 | No replay | -7.94 | — | 70.77 | — |
+| LoRA-EWC (λ = 0.1) | -7.84 | about **1%** | 70.73 | +0.09 retention, -0.04 final |
+| LoRA-EWC (λ = 10) | -7.78 | about **2%** | 70.88 | +0.16 retention, +0.10 final |
 | Random 10% | -5.50 | about **31%** | 71.71 | +2.44 retention, +0.94 final |
-| MFR 10% | -4.88 | about **39%** | 71.98 | +3.06 retention, +1.21 final |
 | Random 14.3% | -5.47 | about **31%** | 71.73 | +2.47 retention, +0.96 final |
-| Lowest margin | -4.47 | about **44%** | 72.56 | +3.47 retention, +1.79 final |
 | FMCR 10% | -5.44 | about **31%** | 72.21 | +2.50 retention, +1.44 final |
-| CPMR 10% | -4.28 | about **46%** | 72.85 | +3.66 retention, +2.08 final |
-| DAPR-Strong (α = 0.1) | +0.34 | about **104%** | 72.88 | +8.28 retention, +2.10 final |
-| **DAPR (α = 0.01)** | **-1.94** | about **76%** | **73.44** | **+6.00 retention, +2.67 final** |
-| DAPR-Gated (α = 0.1) | -0.16 | about **98%** | 73.21 | +7.78 retention, +2.44 final |
-| DAPR-C | +0.81 | about **110%** | 72.77 | +8.75 retention, +2.00 final |
+| MFR 10% | -4.88 | about **39%** | 71.98 | +3.06 retention, +1.21 final |
 | MIR-DPO | -4.72 | about **41%** | 72.08 | +3.22 retention, +1.31 final |
+| Lowest margin | -4.47 | about **44%** | 72.56 | +3.47 retention, +1.79 final |
+| CPMR 10% | -4.28 | about **46%** | 72.85 | +3.66 retention, +2.08 final |
+| **DAPR (α = 0.01)** | **-1.94** | about **76%** | **73.44** | **+6.00 retention, +2.67 final** |
 | COPR-adapted | -0.94 | about **88%** | 65.75 | +7.00 retention, -5.02 final |
+| DAPR-Gated (α = 0.1) | -0.16 | about **98%** | 73.21 | +7.78 retention, +2.44 final |
+| DAPR-Strong (α = 0.1) | +0.34 | about **104%** | 72.88 | +8.28 retention, +2.10 final |
+| DAPR-C | +0.81 | about **110%** | 72.77 | +8.75 retention, +2.00 final |
 
 “Forgetting prevented” expresses the improvement relative to the 7.94-point forgetting observed without replay.
 For example, MFR recovers 3.06 of those 7.94 points, so it prevents approximately `3.06 / 7.94 = 39%` of the
@@ -154,11 +163,13 @@ DAPR-C and COPR-adapted show that very strong stability can come at the cost of 
 
 In simple terms:
 
+- LoRA-EWC prevents at most approximately **2% of the forgetting** and is effectively similar to No Replay.
 - Random 10% prevents approximately **31% of the forgetting**.
-- MFR 10% prevents approximately **39% of the forgetting**.
 - Random 14.3% also prevents approximately **31% of the forgetting** despite using more replay examples.
-- Lowest Margin prevents approximately **44% of the forgetting**.
 - FMCR prevents approximately **31% of the forgetting** and favors final-task learning more than retention.
+- MFR 10% prevents approximately **39% of the forgetting**.
+- MIR-DPO prevents approximately **41% of the forgetting**.
+- Lowest Margin prevents approximately **44% of the forgetting**.
 - CPMR prevents approximately **46% of the forgetting**, the strongest selection-only point estimate.
 - DAPR with α = 0.01 prevents approximately **76% of the forgetting** and has the highest final three-behavior
   average.
@@ -234,11 +245,17 @@ What these results support:
   between the strong and selected settings. The coefficient is therefore scientifically important.
 - **COPR-adapted is a useful negative result.** It sharply reduces forgetting but lowers the final average below No
   Replay. It shows that preserving an old pair distribution too rigidly is not enough; plasticity must be measured.
+- **LoRA-EWC does not explain DAPR's gain.** Coefficients 0.1, 1, and 10 all perform close to No Replay. The selected
+  representative setting, λ = 10, prevents only about 2% of measured forgetting and reaches a 70.88 final average.
+- **Joint training is a useful offline reference.** It reaches a 73.20 average over five seeds. On matched Seeds 0
+  and 1 it reaches 74.00, only 0.56 points above DAPR's four-order average, although this is a descriptive rather
+  than a formal paired comparison.
 
 These are development-validation results from two seeds, not final test results. They support a controlled project
-conclusion, but not a broad claim that DAPR is universally better. LoRA-EWC will test whether standard parameter
-regularization explains DAPR's gain. Balanced MFR and At-Risk MFR will separately test behavior allocation and
-actual current preference failure. Unseen seeds must confirm the frozen method before the locked test.
+conclusion, but not a broad claim that DAPR is universally better. LoRA-EWC did not reproduce DAPR's gain, while
+the joint-access reference shows that DAPR is close to simultaneous-data training on matched seeds. Balanced MFR
+and At-Risk MFR will separately test behavior allocation and actual current preference failure. Unseen seeds must
+confirm the frozen method before the locked test.
 
 ## How the results fit together
 
@@ -258,8 +275,11 @@ The project is not simply a contest to make MFR win. The report tells a sequence
    much better retention–plasticity balance than Lowest Margin.
 8. Stronger is not automatically better: DAPR-Strong, DAPR-C, and COPR-adapted protect old behavior more strongly
    but suppress new-task learning. DAPR-Gated is intermediate.
-9. LoRA-EWC is the next standard regularization control. Balanced MFR and At-Risk MFR remain controlled selection
-   ablations for allocation and current preference failure.
+9. Ordinary LoRA-EWC does not materially prevent forgetting at the tested coefficients, so DAPR's gain is not
+   reproduced by generic parameter protection.
+10. Joint training reaches 73.20 average over five seeds. DAPR is close on matched seeds despite facing sequential
+    access and using only a 10% replay budget.
+11. Balanced MFR and At-Risk MFR remain controlled selection ablations for allocation and current preference failure.
 
 This supports a broader contribution: a controlled study of **what an LLM should rehearse during continual
 preference tuning**, including positive and negative results, rather than an unsupported claim that one heuristic is
@@ -276,8 +296,8 @@ The measured forgetting reflects that difference:
 
 | Earlier behavior | No replay | Random 10% | MFR 10% | Lowest margin | CPMR 10% | **DAPR (α=.01)** |
 |---|---:|---:|---:|---:|---:|---:|
-| Helpful (6 cells) | -6.25 | -4.50 | -4.83 | -4.42 | -3.92 | **-3.58** |
 | Safe (6 cells) | -13.25 | -8.75 | -7.33 | -6.67 | -7.00 | **-1.50** |
+| Helpful (6 cells) | -6.25 | -4.50 | -4.83 | -4.42 | -3.92 | **-3.58** |
 | Quality (4 cells) | -2.50 | -2.12 | -1.25 | -1.25 | -0.75 | **-0.12** |
 
 Safety is the most fragile behavior and Quality is the most stable. A plausible explanation is that later helpfulness
@@ -289,10 +309,10 @@ Average retention also changes by order:
 
 | Order | Sequence | No replay | MFR 10% | Lowest margin | CPMR 10% | **DAPR (α=.01)** |
 |---:|---|---:|---:|---:|---:|---:|
-| 1 | Helpful → Safe → Quality | -9.75 | -5.38 | -5.12 | -6.25 | **-2.50** |
 | 2 | Safe → Helpful → Quality | -13.00 | -9.25 | -8.50 | -7.25 | **-3.38** |
-| 3 | Quality → Helpful → Safe | -4.38 | -1.50 | -1.25 | -1.00 | **-1.00** |
+| 1 | Helpful → Safe → Quality | -9.75 | -5.38 | -5.12 | -6.25 | **-2.50** |
 | 4 | Quality → Safe → Helpful | -4.62 | -3.38 | -3.00 | -2.62 | **-0.88** |
+| 3 | Quality → Helpful → Safe | -4.38 | -1.50 | -1.25 | -1.00 | **-1.00** |
 
 Order 2 is hardest because Safety is learned first, is the most fragile behavior, and must survive two later stages.
 Orders 3 and 4 look easier partly because stable Quality is placed earlier while either Safety or Helpfulness is last

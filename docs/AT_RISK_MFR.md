@@ -1,5 +1,13 @@
 # At-Risk MFR
 
+## Current project status
+
+This remains a planned development ablation and has not yet been evaluated. In the completed 16-method grid,
+original MFR retains better than equal-budget Random 10% but trails Lowest Margin, while DAPR with α = 0.01 gives
+the best observed stability–plasticity balance. LoRA-EWC at coefficients 0.1, 1, and 10 behaves close to No Replay,
+and the five-seed joint-training reference reaches 73.20 mean final accuracy. At-Risk MFR must be evaluated on the
+same four orders and two development seeds before any final method is frozen.
+
 At-Risk MFR is the risk-aware MFR variant. Use the method name:
 
 ```text
@@ -122,7 +130,7 @@ Add tests proving that:
 - an old Stage-1 buffer without policy margins is scored before the first At-Risk replay selection;
 - no At-Risk replay plan can be created while required current policy margins are missing;
 - `needs_refresh("mfr_at_risk")` is true;
-- the seven completed methods are unchanged.
+- the completed baseline methods are unchanged.
 
 Update `tests/test_budget.py`, `tests/test_replay.py`, `tests/test_carc.py`, and `tests/test_protocol.py` as needed.
 
@@ -171,8 +179,8 @@ for order in 1 2 3 4; do
 done
 ```
 
-The seven completed methods do not need to be rerun if their common protocol is unchanged and compatibility checks
-pass.
+The completed baseline methods do not need to be rerun if their common protocol is unchanged and compatibility
+checks pass.
 
 ## How to interpret the result
 

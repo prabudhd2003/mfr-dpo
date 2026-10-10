@@ -1,5 +1,9 @@
 # mfr-dpo
 
+> **Historical pilot only.** These L4/Colab results established that forgetting exists and motivated the final
+> study, but they are not used in the CARC result tables. See the repository root `README.md` and
+> `notebooks/07_compare_runs.ipynb` for the completed 16-method development grid and current conclusions.
+
 CSCI 544, Group 26: **What Should an LLM Rehearse? Budgeted Replay for Continual Preference Tuning**
 
 We fine-tune Qwen2.5-1.5B-Instruct with DPO in three stages (e.g. safe, then helpful, then quality). When a new

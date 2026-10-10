@@ -1,5 +1,13 @@
 # Balanced MFR
 
+## Current project status
+
+This remains a planned development ablation and has not yet been evaluated. The completed 16-method grid shows
+average retention changes of -7.94 for No Replay, -5.50 for Random 10%, -4.88 for original MFR, -4.47 for Lowest
+Margin, -4.28 for CPMR, and -1.94 for the selected DAPR setting. The offline joint-training reference is also
+complete at 73.20 mean final accuracy across five seeds. Balanced MFR must be compared on the same four orders and
+two development seeds before method selection is frozen.
+
 ## Purpose
 
 Original MFR ranks every old pair together by:
@@ -151,8 +159,8 @@ for order in 1 2 3 4; do
 done
 ```
 
-The seven completed methods do not need to be rerun if the common data, model, training, scoring, and replay budgets are
-unchanged and Stage-1 compatibility is verified.
+The completed baseline methods do not need to be rerun if the common data, model, training, scoring, and replay
+budgets are unchanged and Stage-1 compatibility is verified.
 
 ## How to interpret the result
 

@@ -2,18 +2,32 @@
 
 ## 1. Current result: DAPR is the provisional development winner
 
-The full 13-method, eight-cell development grid is complete. The selected DAPR setting uses Lowest Margin retrieval
+The full 16-method, eight-cell development grid is complete. The selected DAPR setting uses Lowest Margin retrieval
 and a one-sided learned-state token anchor with `anchor_strength = 0.01`. Its internal method name is `dapr_weak`,
 but the paper and figures call it **DAPR (α = 0.01)**. The old identifier remains in code and artifacts so the
 completed runs stay reproducible.
 
+The table is ordered from **most forgetting to least forgetting**. More negative old-behavior change means more
+forgetting; values near zero or above zero mean stronger retention.
+
 | Method | Average retention change | Final current-task score | Final three-behavior average | Runtime |
 |---|---:|---:|---:|---:|
+| LoRA-EWC (λ = 1) | -7.97 | 74.75 | 70.77 | 23.80 min |
+| No Replay | -7.94 | 74.81 | 70.77 | 22.48 min |
+| LoRA-EWC (λ = 0.1) | -7.84 | 74.50 | 70.73 | 23.81 min |
+| LoRA-EWC (λ = 10) | -7.78 | 74.69 | 70.88 | 23.86 min |
 | Random 10% | -5.50 | 73.62 | 71.71 | 24.28 min |
+| Random 14.3% | -5.47 | 73.88 | 71.73 | 24.91 min |
+| FMCR | -5.44 | 74.75 | 72.21 | 29.26 min |
 | Original MFR | -4.88 | 73.75 | 71.98 | 28.28 min |
+| MIR-DPO | -4.72 | 73.81 | 72.08 | 36.13 min |
 | Lowest Margin | -4.47 | 74.31 | 72.56 | 28.59 min |
 | CPMR | -4.28 | 74.56 | 72.85 | 48.75 min |
 | **DAPR (α = 0.01)** | **-1.94** | 72.81 | **73.44** | 29.13 min |
+| COPR-adapted | -0.94 | 60.56 | 65.75 | 28.70 min |
+| DAPR-Gated (α = 0.1) | -0.16 | 71.62 | 73.21 | 29.76 min |
+| DAPR-Strong (α = 0.1) | +0.34 | 70.75 | 72.88 | 29.31 min |
+| DAPR-C | +0.81 | 69.56 | 72.77 | 29.33 min |
 
 DAPR improves retention over Lowest Margin by 2.53 points and final average by 0.87, while giving up 1.50 points on
 the final task. The paired retention interval excludes zero; the final-average interval does not. It is therefore
@@ -67,27 +81,52 @@ of 0.67. CPMR and Random 10% overlap by only 0.04. CPMR therefore often agrees w
 while making a clearly targeted, non-random modification. The main drawback is computation: its reversible
 lookahead raises mean runtime by about 20 minutes relative to Lowest Margin.
 
-## 3. Run the LoRA-EWC development sweep
+## 3. Completed LoRA-EWC development sweep
 
-LoRA-EWC is now implemented as a no-replay regularization baseline. Run coefficients 0.1, 1, and 10 on the existing
-eight development cells using the commands in `docs/CARC.md`. Select one coefficient by the frozen tolerance and
-final-average rule, then keep only that coefficient in confirmation. This tests whether standard parameter
-protection can explain DAPR's gain.
+LoRA-EWC was run at coefficients 0.1, 1, and 10 on all eight development cells. This table is again ordered from
+most forgetting to least forgetting:
+
+| Method | Average retention change | Final current-task score | Final three-behavior average |
+|---|---:|---:|---:|
+| LoRA-EWC (λ = 1) | -7.97 | 74.75 | 70.77 |
+| No Replay | -7.94 | 74.81 | 70.77 |
+| LoRA-EWC (λ = 0.1) | -7.84 | 74.50 | 70.73 |
+| **LoRA-EWC (λ = 10)** | **-7.78** | 74.69 | **70.88** |
+
+The frozen coefficient rule selects λ = 10 as the representative EWC setting, but the scientific result is
+negative: it improves retention by only 0.16 points and final average by only 0.10 points over No Replay. It passes
+zero of eight cells under the replay-method success rule. DAPR improves retention by 5.84 points and final average
+by 2.56 points over EWC λ = 10, so generic LoRA parameter protection does not explain DAPR's gain.
+
+Before publication, inspect the saved `ewc_loss` values and verify that `coefficient × ewc_loss` was not negligible
+relative to the DPO loss. If λ = 10 produced a material penalty, report EWC as a valid negative baseline. If not,
+perform a documented higher-scale diagnostic before making a strong claim about EWC.
 
 ## 4. Finish Balanced MFR and At-Risk MFR
 
 Next, implement, test, and run both methods for all four orders and both seeds.
 
-## 4a. Run the implemented joint-training reference
+## 4a. Completed joint-training reference
 
-The offline joint-access baseline is implemented separately from continual runs. It trains on all 6,000 frozen
+The offline joint-access baseline was run separately from continual runs. It trains on all 6,000 frozen
 training pairs in one global seed-controlled shuffle using the same model, QLoRA, DPO, optimizer, and one-epoch
-settings. Run Seeds 0–4 using `python scripts/submit_carc.py joint ...` as documented in `docs/CARC.md`.
+settings. Seeds 0–4 are complete.
 
 Joint training answers what happens when all three datasets remain available simultaneously. It has no task order,
-replay buffer, or conventional forgetting measurement. Report its final per-behavior and three-behavior-average
-validation scores as an offline reference, then evaluate the frozen joint checkpoints on the locked test only after
-the same final-evaluation decision used for continual methods.
+replay buffer, or conventional forgetting measurement.
+
+| Behavior | Mean validation accuracy | Seed standard deviation |
+|---|---:|---:|
+| Helpful | 66.70 | 1.96 |
+| Safe | 80.70 | 1.52 |
+| Quality | 72.20 | 0.91 |
+| **Three-behavior average** | **73.20** | **0.99** |
+
+On matched Seeds 0 and 1, joint training averages 74.00 versus DAPR's 73.44 across the four task orders. The
+0.56-point difference is descriptive because a joint seed and an order–seed continual cell are different
+experimental units. Joint training is an offline simultaneous-data reference, not a forgetting method or a
+guaranteed upper bound. Evaluate its frozen checkpoints on the locked test only after the same final-evaluation
+decision used for continual methods.
 
 ## 5. Verify the run grid
 
@@ -189,9 +228,9 @@ forecast horizon.
 | Method | Average retention change | Final current-task score | Final three-behavior average | Runtime |
 |---|---:|---:|---:|---:|
 | Random 10% | -5.50 | 73.62 | 71.71 | 24.28 min |
+| FMCR | -5.44 | **74.75** | 72.21 | 29.26 min |
 | Original MFR | -4.88 | 73.75 | 71.98 | 28.28 min |
 | Lowest Margin | **-4.47** | 74.31 | **72.56** | 28.59 min |
-| FMCR | -5.44 | **74.75** | 72.21 | 29.26 min |
 
 FMCR did not beat Lowest Margin. Against Lowest Margin it retained 0.97 points less, with a paired 95% interval of
 `[-1.56, -0.47]`, and its final three-behavior average was 0.35 points lower, with an interval of `[-0.67, -0.06]`.
@@ -225,18 +264,23 @@ the careful wording **“to our knowledge”** and include a complete related-wo
 ## 10. Confirm on unseen seeds
 
 Seeds 0 and 1 have been used for development. After the remaining variants are evaluated and the final method is
-selected, add unseen seeds such as 2, 3, and 4 to the protocol and run a confirmation grid. DAPR with α = 0.01 is
-the current provisional winner. At minimum include:
+selected, add the two missing task permutations so every behavior appears in every sequence position:
+
+- Order 5: Helpful → Quality → Safe;
+- Order 6: Safe → Quality → Helpful.
+
+Run Orders 5 and 6 for Seeds 0 and 1 only after the method is frozen, then run unseen Seeds 2, 3, and 4 across all
+six orders. DAPR with α = 0.01 is the current provisional winner. At minimum include:
 
 - no replay;
 - Random 10%;
 - original MFR;
 - lowest margin;
-- the selected LoRA-EWC coefficient;
+- LoRA-EWC with the selected representative coefficient λ = 10;
 - the selected final method.
 
-Run all four orders. Do not select a different method after seeing the confirmation results. More independent seeds
-are more valuable now than increasing the current 2,000 training pairs.
+Do not select a different method after seeing the confirmation results. More independent seeds are more valuable
+now than increasing the current 2,000 training pairs.
 
 ## 11. Run the locked test once
 
@@ -283,8 +327,9 @@ The final report should clearly separate:
 A defensible final contribution is a controlled study of which preference pairs should be replayed during continual
 DPO. The current evidence supports a progression from historical forgetting, to present difficulty, to
 counterfactual interference from the actual upcoming updates, and finally the objective used to preserve selected
-pairs. DAPR has the strongest observed stability–plasticity balance, but it must beat the selected LoRA-EWC baseline
-and hold up on unseen seeds, generation evaluation, and the locked test before it is presented as a reliable win.
+pairs. DAPR has the strongest observed stability–plasticity balance and already clearly beats the selected LoRA-EWC
+baseline on development validation. It must still hold up on unseen seeds, generation evaluation, and the locked
+test before it is presented as a reliable win.
 
 ## Completion checklist
 
@@ -293,15 +338,16 @@ and hold up on unseen seeds, generation evaluation, and the locked test before i
 - [x] CPMR implemented and tested
 - [x] CPMR run and analyzed in all eight cells
 - [x] FMCR run and analyzed in all eight cells
-- [x] Current seven-method validation and CPMR mechanism analysis complete
+- [x] Original seven-method validation and CPMR mechanism analysis complete
 - [x] DAPR variants, MIR-DPO, and COPR-adapted run and analyzed in all eight cells
 - [x] LoRA-EWC coefficients implemented and tested
-- [ ] LoRA-EWC coefficients 0.1, 1, and 10 run in all eight cells
-- [ ] One LoRA-EWC coefficient selected and frozen
+- [x] LoRA-EWC coefficients 0.1, 1, and 10 run in all eight cells
+- [x] LoRA-EWC λ = 10 selected as the representative confirmation baseline
 - [x] Offline joint-training reference implemented and tested
-- [ ] Joint-training Seeds 0–4 run and analyzed
+- [x] Joint-training Seeds 0–4 run and analyzed
 - [ ] Balanced MFR and At-Risk MFR added to the full analysis
 - [ ] Final method and statistical plan frozen
+- [ ] Missing Orders 5 and 6 implemented and verified
 - [ ] Unseen-seed confirmation complete
 - [ ] Locked test run once
 - [ ] Generation and automatic evaluation complete
