@@ -2,7 +2,7 @@
 
 **What Should an LLM Rehearse? Budgeted Replay for Continual Preference Tuning**
 
-> **Course-project branch.** This is the `project` branch, used in the CARC folder `/project2/xiangren_1987/group26`. Setup and every-session commands: [docs/PROJECT_FOLDER.md](docs/PROJECT_FOLDER.md). The research paper uses the `complete` branch in `/project2/xiangren_1987/grp26-mfr-dpo`.
+> **Course-project branch.** This is the `project` branch, used in the CARC folder `/project2/xiangren_1987/group26`. Setup and every-session commands: [docs/PROJECT_FOLDER.md](docs/PROJECT_FOLDER.md).
 
 ## Project summary
 
