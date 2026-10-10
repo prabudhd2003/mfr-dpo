@@ -15,6 +15,8 @@ from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_t
 from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, get_linear_schedule_with_warmup
 
+from mfr_utils import pin_chat_template_date
+
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 ANCHOR_METHODS = (
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted",
@@ -31,6 +33,7 @@ def load_model(model_name=MODEL_NAME, lora_r=16, adapter_path=None, revision=Non
                lora_alpha=None, lora_dropout=0.05):
     """Load the frozen 4-bit base model and either a fresh or saved LoRA adapter."""
     tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision)
+    pin_chat_template_date(tokenizer)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
@@ -908,6 +911,12 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
                 buffer.rows().to_csv(refresh_path, index=False)
             if method == "mir_dpo" and progress_path:
                 refresh_path = Path(progress_path).parent / f"mir_dpo_refresh_{interval + 1}.csv"
+                buffer.rows().to_csv(refresh_path, index=False)
+            if (progress_path and mfr_replay.needs_refresh(method)
+                    and method not in ("fmcr", "cpmr", "mir_dpo")):
+                # Full-buffer snapshot at every refresh (logging only): lets the analysis
+                # test whether a selection score predicts the next interval's margin drop.
+                refresh_path = Path(progress_path).parent / f"buffer_refresh_{interval + 1}.csv"
                 buffer.rows().to_csv(refresh_path, index=False)
             plan_at = 0
 

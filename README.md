@@ -33,6 +33,12 @@ more likely—while allowing movement in the helpful direction. This separates r
 - Notebook 07 reports the complete validation grid, paired uncertainty, per-dataset forgetting, replay-selection
   overlap, concentration, final scores, and runtime.
 
+The final-evaluation infrastructure is also implemented, but these are **not completed results yet**. It includes
+deterministic locked-test and XSTest generation, WildGuard harm/refusal scoring, official IFEval, position-controlled
+Prometheus helpfulness/quality comparisons, blinded pairwise human-review sheets, and a pinned second-model
+replication on `meta-llama/Llama-3.2-3B-Instruct`. The scripts are deliberately separate from training and final-test
+generation requires an explicit acknowledgement that method selection has been frozen.
+
 The original seven completed methods are:
 
 | Method | Meaning |
@@ -318,7 +324,7 @@ datasets are exposed to later training. The per-dataset table is the safer basis
 
 ```text
 mfr-dpo/
-├── configs/       # Frozen model, data, training, order, seed, and method settings
+├── configs/       # Frozen training, final-evaluation, and second-model settings
 ├── data/v2/       # Frozen preference-pair files and manifest
 ├── docs/          # CARC instructions, two method specifications, and final next steps
 ├── notebooks/     # CARC status and validation analysis notebooks
@@ -340,8 +346,11 @@ The active notebooks are:
 | Notebook | Purpose |
 |---|---|
 | `01_carc_status.ipynb` | Check the frozen data, reference cache, and completed CARC runs. |
-| `07_compare_runs.ipynb` | Produce the complete validation tables, figures, uncertainty, and conclusions. |
+| `07a_results.ipynb` | Produce the complete validation tables, figures, uncertainty, and conclusions. |
 | `08_joint_baseline.ipynb` | Analyze the separate all-data-at-once joint-training reference. |
+| `09_generation_evaluation.ipynb` | Combine safety, XSTest, IFEval, and automatic pairwise-judge results. |
+| `10_human_evaluation.ipynb` | Display blinded human preference and reviewer agreement. |
+| `11_second_model.ipynb` | Compare the selected methods within Qwen and the pinned Llama replication. |
 
 Training runs as unattended Slurm jobs on USC CARC using one NVIDIA L40S GPU. Large caches, checkpoints, logs, and
 results are stored under the ignored CARC `artifacts/` directory rather than Git.

@@ -110,7 +110,7 @@ Add tests proving that:
 - Confirm that `--methods mfr_balanced` can run without requesting the already completed methods.
 - Add or update protocol-validation expectations for the new method.
 
-### `src/mfr_analysis.py` and `notebooks/07_compare_runs.ipynb`
+### `src/mfr_analysis.py` and `notebooks/07a_results.ipynb`
 
 - Add the display label `Balanced MFR 10%` and a distinct, consistent color.
 - Include the method in the full-grid summary, per-dataset forgetting, heatmaps, paired comparisons, and runtime table.

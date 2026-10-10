@@ -91,3 +91,120 @@ def inter_rater_agreement(completed_sheets):
         return float("nan")
     agreements = [(table[a] == table[b]).mean() for a in table for b in table if a < b]
     return float(np.mean(agreements))
+
+
+def make_pairwise_blind_review(generations, candidate_method, baseline_method,
+                               prompts_per_behavior=50, seed=544):
+    """Create a wide, blinded A/B sheet stratified by behavior and its private key."""
+    required = {"id", "behavior", "prompt", "method", "response"}
+    if missing := required - set(generations):
+        raise ValueError(f"generations missing {sorted(missing)}")
+    methods = [candidate_method, baseline_method]
+    subset = generations[generations["method"].isin(methods)].copy()
+    rng = np.random.default_rng(seed)
+    sheet_rows, key_rows = [], []
+    for behavior, frame in subset.groupby("behavior", sort=True):
+        complete = frame.groupby("id")["method"].nunique()
+        eligible = complete[complete == 2].index.to_numpy()
+        if len(eligible) < prompts_per_behavior:
+            raise ValueError(
+                f"only {len(eligible)} complete {behavior} prompts; need {prompts_per_behavior}"
+            )
+        selected = rng.choice(eligible, size=prompts_per_behavior, replace=False)
+        for prompt_id in selected:
+            group = frame[frame["id"] == prompt_id].set_index("method")
+            a_method, b_method = methods if rng.random() < 0.5 else methods[::-1]
+            code = _code(seed, f"{behavior}:{prompt_id}")
+            sheet_rows.append({
+                "review_id": code,
+                "behavior": behavior,
+                "prompt": group.iloc[0]["prompt"],
+                "response_A": group.loc[a_method, "response"],
+                "response_B": group.loc[b_method, "response"],
+                "preferred_response": "",
+                "confidence_1_5": "",
+                "notes": "",
+            })
+            key_rows.append({
+                "review_id": code,
+                "behavior": behavior,
+                "prompt_id": prompt_id,
+                "method_A": a_method,
+                "method_B": b_method,
+                "candidate_method": candidate_method,
+                "baseline_method": baseline_method,
+            })
+    sheet = pd.DataFrame(sheet_rows).sample(frac=1, random_state=seed).reset_index(drop=True)
+    return sheet, pd.DataFrame(key_rows)
+
+
+def score_pairwise_reviews(completed_sheets, key, seed=544, bootstrap_samples=10000):
+    """Unblind A/B/TIE choices and bootstrap prompts, not individual reviewer rows."""
+    if len(completed_sheets) < 1:
+        raise ValueError("at least one completed review sheet is required")
+    rows = []
+    for reviewer, sheet in enumerate(completed_sheets, start=1):
+        frame = sheet.copy()
+        frame["reviewer"] = reviewer
+        rows.append(frame)
+    reviews = pd.concat(rows, ignore_index=True)
+    reviews["preferred_response"] = reviews["preferred_response"].astype(str).str.strip().str.upper()
+    invalid = reviews.loc[~reviews["preferred_response"].isin(["A", "B", "TIE"]),
+                          ["review_id", "preferred_response"]]
+    if len(invalid):
+        raise ValueError(
+            "every preferred_response must be A, B, or TIE; invalid rows: "
+            + invalid.head(5).to_dict("records").__repr__()
+        )
+    merged = reviews.merge(key, on=["review_id", "behavior"], validate="many_to_one")
+    merged["candidate_score"] = np.where(
+        merged["preferred_response"].eq("TIE"), 0.5,
+        np.where(
+            (merged["preferred_response"].eq("A") &
+             merged["method_A"].eq(merged["candidate_method"])) |
+            (merged["preferred_response"].eq("B") &
+             merged["method_B"].eq(merged["candidate_method"])),
+            1.0, 0.0,
+        ),
+    )
+    per_prompt = merged.groupby(
+        ["review_id", "behavior", "candidate_method", "baseline_method"], as_index=False
+    )["candidate_score"].mean()
+    rng = np.random.default_rng(seed)
+    summaries = []
+    for behavior, group in list(per_prompt.groupby("behavior")) + [("overall", per_prompt)]:
+        values = group["candidate_score"].to_numpy(float)
+        boot = np.empty(bootstrap_samples)
+        for index in range(bootstrap_samples):
+            boot[index] = rng.choice(values, size=len(values), replace=True).mean()
+        summaries.append({
+            "behavior": behavior,
+            "candidate_method": group["candidate_method"].iloc[0],
+            "baseline_method": group["baseline_method"].iloc[0],
+            "prompts": int(len(values)),
+            "reviewers": int(merged["reviewer"].nunique()),
+            "candidate_score_pct": 100.0 * float(values.mean()),
+            "ci_low_pct": 100.0 * float(np.quantile(boot, 0.025)),
+            "ci_high_pct": 100.0 * float(np.quantile(boot, 0.975)),
+        })
+    return merged, pd.DataFrame(summaries)
+
+
+def pairwise_reviewer_agreement(completed_sheets):
+    """Exact A/B/TIE agreement for every reviewer pair on matched prompts."""
+    choices = []
+    for reviewer, sheet in enumerate(completed_sheets, start=1):
+        choices.append(sheet.set_index("review_id")["preferred_response"].astype(str)
+                       .str.strip().str.upper().rename(reviewer))
+    table = pd.concat(choices, axis=1, join="inner")
+    rows = []
+    for first in table:
+        for second in table:
+            if first < second:
+                rows.append({
+                    "reviewer_1": first,
+                    "reviewer_2": second,
+                    "matched_prompts": int(len(table)),
+                    "exact_agreement_pct": 100.0 * float((table[first] == table[second]).mean()),
+                })
+    return pd.DataFrame(rows)

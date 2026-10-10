@@ -1,0 +1,50 @@
+{
+  "evaluation_version": "1.1",
+  "generation": {
+    "batch_size": 32,
+    "do_sample": false,
+    "max_new_tokens": 512,
+    "seed": 544
+  },
+  "xstest": {
+    "dataset": "Paul/XSTest",
+    "dataset_revision": "f600c994b256f12867dfa5b3eb3d545a3e62f8b5",
+    "split": "train"
+  },
+  "harmbench": {
+    "dataset": "walledai/HarmBench",
+    "config": "standard",
+    "dataset_revision": "fb6c2afd5a2a943d701d6db3efab87d077e81be5",
+    "split": "train",
+    "expected_rows": 200,
+    "attack": "DirectRequest (behavior string used verbatim as the user prompt)"
+  },
+  "safety_evaluator": {
+    "model_name": "allenai/wildguard",
+    "model_revision": "cbba4823f3e8020e5a74a5e29bf85072def6f2ff",
+    "batch_size": 8,
+    "max_new_tokens": 48
+  },
+  "pairwise_judge": {
+    "model_name": "prometheus-eval/prometheus-7b-v2.0",
+    "model_revision": "66ffb1fc20beebfb60a3964a957d9011723116c5",
+    "batch_size": 2,
+    "max_new_tokens": 512,
+    "score_both_orders": true,
+    "use_reference": false,
+    "prompt_format": "prometheus-eval RELATIVE_PROMPT_WO_REF in FastChat mistral conversation"
+  },
+  "judge_validation": {
+    "split": "val",
+    "behaviors": [
+      "helpful",
+      "quality"
+    ],
+    "minimum_position_consistent_agreement_pct": 70.0
+  },
+  "human_evaluation": {
+    "prompts_per_behavior": 50,
+    "seed": 544,
+    "minimum_reviewers": 2
+  }
+}

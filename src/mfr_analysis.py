@@ -19,7 +19,8 @@ METHOD_COLORS = {
     "none": "#6b6a66", "random": "#2a78d6", "random_high": "#7857c5",
     "lowest_margin": "#1baf7a", "mfr": "#eb6834", "fmcr": "#b52fb5",
     "cpmr": "#7a3db8",
-    "dapr": "#d68a00", "dapr_c": "#a45c00", "mir_dpo": "#008c95",
+    "dapr": "#d68a00", "dapr_weak": "#e6ad38", "dapr_gated": "#8a5a00",
+    "dapr_c": "#a45c00", "mir_dpo": "#008c95",
     "copr_adapted": "#b13c63",
     "ewc_100": "#4c78a8", "ewc_1000": "#355f8a", "ewc_10000": "#1f3b57",
 }
@@ -351,3 +352,110 @@ def concentration(values, top_fraction=0.10):
         return 0.0
     n = max(1, int(np.ceil(len(losses) * top_fraction)))
     return np.sort(losses)[-n:].sum() / losses.sum()
+
+
+# ----------------------------------------------------------------------------- confirmation
+
+def load_locked_test(artifact_dir, subdir="runs"):
+    """All locked_test/results_test.csv rows (format accepted by mfr_stats.cell_metrics)."""
+    paths = sorted(glob.glob(os.path.join(artifact_dir, subdir, "*", "locked_test", "results_test.csv")))
+    if not paths:
+        raise FileNotFoundError(f"no locked_test/results_test.csv under {artifact_dir}/{subdir}")
+    return pd.concat([pd.read_csv(path) for path in paths], ignore_index=True)
+
+
+# ----------------------------------------------------------------------------- mechanisms
+
+# How each selection score is computed from a buffer row: higher = selected first.
+SELECTION_SCORES = {
+    "lowest_margin": lambda rows: -rows["current_margin"],
+    "dapr": lambda rows: -rows["current_margin"],
+    "dapr_weak": lambda rows: -rows["current_margin"],
+    "dapr_gated": lambda rows: -rows["current_margin"],
+    "dapr_c": lambda rows: -rows["current_margin"],
+    "copr_adapted": lambda rows: -rows["current_margin"],
+    "mfr": lambda rows: rows["peak_margin"] - rows["current_margin"],
+    "cpmr": lambda rows: -np.minimum(rows["current_margin"], rows["projected_margin"]),
+}
+SNAPSHOT_PREFIX = {"cpmr": "cpmr_refresh", "fmcr": "fmcr_refresh", "mir_dpo": "mir_dpo_refresh"}
+
+
+def replay_regression_share(runs):
+    """For every replayed slot: had the pair actually regressed below its own peak margin?
+
+    current margin at selection is recovered from the logged selection score (Lowest-Margin
+    family: -score; MFR: peak - score). Peak margins come from the buffer saved at the end of
+    the previous stage. `never_learned` = peak margin <= 0. One row per (run, stage).
+    """
+    rows = []
+    for meta, part in _run_rows(runs):
+        method = str(meta["method"])
+        if method not in SELECTION_SCORES or method == "cpmr":
+            continue
+        for stage in range(2, len(meta["order"]) + 1):
+            log_path = os.path.join(_stage_folder(meta, stage), "replay_log.csv")
+            buffer_path = os.path.join(_stage_folder(meta, stage - 1), "buffer.csv")
+            if not (os.path.exists(log_path) and os.path.exists(buffer_path)):
+                continue
+            log = pd.read_csv(log_path)
+            if log.empty:
+                continue
+            peak = pd.read_csv(buffer_path).set_index("id")["peak_margin"]
+            log["peak_margin"] = log["id"].map(peak)
+            if method == "mfr":
+                log["current_margin"] = log["peak_margin"] - log["selection_score"]
+            else:
+                log["current_margin"] = -log["selection_score"]
+            regressed = log["current_margin"] < log["peak_margin"]
+            rows.append({
+                **{key: meta[key] for key in ("run_name", "order_id", "method", "seed")},
+                "stage": stage, "trained_on": meta["order"][stage - 1], "slots": len(log),
+                "regressed_pct": 100.0 * float(regressed.mean()),
+                "never_learned_pct": 100.0 * float((log["peak_margin"] <= 0).mean()),
+                "regressed_and_learned_pct": 100.0 * float((regressed & (log["peak_margin"] > 0)).mean()),
+            })
+    return pd.DataFrame(rows)
+
+
+def score_validity(runs):
+    """Does a method's selection score predict the next interval's margin drop?
+
+    For refresh i and i+1 snapshots of the full buffer, drop = current_i - current_(i+1) on pairs
+    NOT replayed during interval i (replayed pairs are changed by the intervention itself).
+    Reports Spearman rho(score_i, drop) per (run, stage, interval). Needs per-refresh snapshots:
+    buffer_refresh_*.csv (written for refresh methods from this commit on) or the CPMR/FMCR/MIR
+    files.
+    """
+    from scipy.stats import spearmanr
+
+    rows = []
+    for meta, part in _run_rows(runs):
+        method = str(meta["method"])
+        if method not in SELECTION_SCORES:
+            continue
+        prefix = SNAPSHOT_PREFIX.get(method, "buffer_refresh")
+        for stage in range(2, len(meta["order"]) + 1):
+            folder = _stage_folder(meta, stage)
+            snapshots = sorted(glob.glob(os.path.join(folder, f"{prefix}_*.csv")),
+                               key=lambda path: int(path.rsplit("_", 1)[1].split(".")[0]))
+            log_path = os.path.join(folder, "replay_log.csv")
+            if len(snapshots) < 2 or not os.path.exists(log_path):
+                continue
+            log = pd.read_csv(log_path)
+            for index in range(len(snapshots) - 1):
+                now = pd.read_csv(snapshots[index]).set_index("id")
+                later = pd.read_csv(snapshots[index + 1]).set_index("id")
+                interval = index + 1
+                replayed = set(log.loc[log["interval"] == interval, "id"])
+                keep = [pair for pair in now.index if pair not in replayed and pair in later.index]
+                if len(keep) < 10:
+                    continue
+                score = SELECTION_SCORES[method](now.loc[keep])
+                drop = now.loc[keep, "current_margin"] - later.loc[keep, "current_margin"]
+                rho, p = spearmanr(score, drop)
+                rows.append({
+                    **{key: meta[key] for key in ("run_name", "order_id", "method", "seed")},
+                    "stage": stage, "interval": interval, "pairs": len(keep),
+                    "spearman_rho": float(rho), "p_value": float(p),
+                })
+    return pd.DataFrame(rows)

@@ -283,24 +283,58 @@ The locked test is for final confirmation, not method development.
 
 ## 12. Evaluate generated responses
 
-Preference-pair accuracy does not prove that generated answers are helpful, safe, or high quality. Generate responses
-from the final checkpoints using the frozen deterministic generation settings, then evaluate:
+The complete evaluation pipeline is now implemented but must remain unused until method selection is frozen.
+`generate_final_responses.py` produces deterministic responses for all three locked test sets and the official 450
+XSTest prompts. It refuses unfinished runs, requires an explicit final-evaluation acknowledgement, will not overwrite
+existing outputs by default, and records hashes of the settings, adapter, evaluator protocol, and outputs.
 
-- instruction following;
-- safety and refusal behavior on harmful prompts;
-- general response quality;
-- retention across behaviors learned earlier in the sequence;
-- obvious failure cases and qualitative examples.
+The predeclared generated-response metrics are:
 
-Use the same prompt sets and generation settings for every compared method.
+| Question | Prompts | Evaluator | Main metric |
+|---|---|---|---|
+| Does the model produce harmful answers? | Locked PKU-SafeRLHF test prompts | WildGuard | harmful-response rate |
+| Does safety training cause unnecessary refusal? | XSTest's 250 safe and 200 unsafe prompts | WildGuard | safe over-refusal and unsafe refusal |
+| Does the model follow explicit instructions? | IFEval's 541 prompts | official `lm-eval` task | strict and loose accuracy |
+| Are answers more helpful or higher quality? | Locked Helpful and Quality prompts | Prometheus 2 pairwise judge | candidate score with ties worth half |
+
+Prometheus scores both A/B orderings. A positional disagreement is recorded as a tie, and position consistency is
+reported. WildGuard parse failures are counted rather than silently discarded. These automatic judges are
+measurement tools, not ground truth, so the paper must report evaluator names and exact revisions and support the
+main answer-quality comparison with blinded human review.
+
+Exact submission commands are in Sections 9 and 10 of `docs/CARC.md`. Results are combined by
+`notebooks/09_generation_evaluation.ipynb`.
 
 ## 13. Conduct blinded human evaluation
 
-Create a small, balanced prompt sample across all three behaviors. Hide method names, randomize response order, and
-ask reviewers to judge the relevant criteria. Record the rubric, reviewer agreement, ties, and uncertainty. Human
-evaluation should support—not replace—the automatic and preference-pair metrics.
+The human-review pipeline is also implemented. It samples the same number of prompts from Helpful, Safe, and
+Quality, randomizes the A/B position independently for every prompt, saves the method mapping in a separate private
+file, and gives reviewers a short behavior-specific rubric. Reviewers enter A, B, or TIE and work independently.
 
-## 14. Complete the report and presentation
+Use at least two reviewers. The scorer reports candidate preference with a prompt-level bootstrap interval and
+pairwise exact reviewer agreement. Bootstrapping prompts, rather than treating every reviewer rating as independent,
+prevents an artificially narrow interval. The private key must remain hidden until all sheets are frozen.
+
+`notebooks/10_human_evaluation.ipynb` displays the final preference and agreement tables.
+
+## 14. Replicate the selected result on a second model
+
+The replication pipeline is implemented for `meta-llama/Llama-3.2-3B-Instruct`, pinned to revision
+`0cb88a4f764b7a12671c53f0838cd831a0843b95`. This model was chosen because it is a different architecture and model
+family from Qwen while remaining feasible on one L40S. The Meta license must be accepted and a Hugging Face token
+must be available to the CARC job.
+
+Before training, the second-model cache job retokenizes every frozen pair and fails if the Llama tokenizer would
+exceed the 1,024-token limit. It then builds a new model-specific reference cache. The frozen pairs, orders, DPO
+settings, QLoRA settings, and evaluation rules stay the same; only the base model and its reference cache change.
+
+The shortlist must be written down before looking at Llama results. The default serious-publication set is No
+Replay, Random 10%, original MFR, Lowest Margin, and selected DAPR. Add the selected LoRA-EWC coefficient only if it
+is retained as a headline baseline after the Qwen development sweep. Keep Llama artifacts in
+`artifacts_llama32_3b`, separate from the Qwen tree, and use `notebooks/11_second_model.ipynb` for within-model
+comparisons.
+
+## 15. Complete the report and presentation
 
 The final report should clearly separate:
 
@@ -339,5 +373,10 @@ test before it is presented as a reliable win.
 - [ ] Locked test run once
 - [ ] Generation and automatic evaluation complete
 - [ ] Blinded human evaluation complete
+- [x] Generation, automatic-judge, and human-review pipelines implemented
+- [x] Pinned second-model protocol and CARC submission pipeline implemented
+- [ ] Second-model shortlist frozen before replication
+- [ ] Second-model reference cache and tokenizer validation complete
+- [ ] Second-model replication complete
 - [ ] Error analysis complete
 - [ ] Final figures, report, and presentation complete

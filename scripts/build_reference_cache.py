@@ -19,8 +19,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True, help="CSV path in the persistent CARC artifact directory")
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument(
+        "--protocol", default=str(ROOT / "configs" / "experiment_protocol.json"),
+        help="Training protocol whose base model defines the reference log probabilities",
+    )
     args = parser.parse_args()
-    protocol = load_protocol(ROOT / "configs" / "experiment_protocol.json")
+    protocol = load_protocol(args.protocol)
     data_dir = ROOT / protocol["data_dir"]
     splits = mfr_data.load_splits(data_dir)
     seed_everything(0)

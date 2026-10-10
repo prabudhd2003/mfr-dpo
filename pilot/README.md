@@ -2,7 +2,7 @@
 
 > **Historical pilot only.** These L4/Colab results established that forgetting exists and motivated the final
 > study, but they are not used in the CARC result tables. See the repository root `README.md` and
-> `notebooks/07_compare_runs.ipynb` for the current headline development grid and conclusions.
+> `notebooks/07a_results.ipynb` for the current headline development grid and conclusions.
 
 CSCI 544, Group 26: **What Should an LLM Rehearse? Budgeted Replay for Continual Preference Tuning**
 

@@ -37,7 +37,7 @@ git pull --ff-only origin carc
 If `git pull` says there are local notebook changes and those changes are only executed outputs that can be discarded:
 
 ```bash
-git restore -- notebooks/07_compare_runs.ipynb
+git restore -- notebooks/07a_results.ipynb
 git pull --ff-only origin carc
 ```
 
@@ -474,7 +474,7 @@ Before opening Jupyter or code-server from a terminal, set:
 export MFR_OUTPUT_DIR=/project2/xiangren_1987/grp26-mfr-dpo/artifacts
 ```
 
-Use `notebooks/01_carc_status.ipynb` to check completion and `notebooks/07_compare_runs.ipynb` to analyze all methods,
+Use `notebooks/01_carc_status.ipynb` to check completion and `notebooks/07a_results.ipynb` to analyze all methods,
 orders, and seeds. Select the `Python (mfr-dpo)` kernel and run Notebook 07 from the top after the new methods finish.
 
 Do not run the locked-test script while replay methods are still being designed or selected.
@@ -504,3 +504,194 @@ git rev-parse --short HEAD
 ```
 
 `git status --short` must be empty because the experiment runner refuses an uncommitted scientific checkout.
+
+## 9. Final generated-response evaluation
+
+Do this only after the development method, confirmation plan, and locked-test plan are frozen. Install the separate
+evaluation dependencies once inside the existing environment:
+
+```bash
+module purge
+module load conda
+eval "$(conda shell.bash hook)"
+conda activate /project2/xiangren_1987/grp26-mfr-dpo/.conda/envs/mfr-dpo
+cd /project2/xiangren_1987/grp26-mfr-dpo
+python -m pip install -r requirements-eval.txt
+export MFR_OUTPUT_DIR=/project2/xiangren_1987/grp26-mfr-dpo/artifacts
+```
+
+WildGuard requires accepting the AI2 responsible-use terms on Hugging Face. After access is granted, provide the
+token to Slurm without writing it into a repository file:
+
+```bash
+read -s -p "Hugging Face token: " HF_TOKEN
+export HF_TOKEN
+```
+
+The examples below compare the selected DAPR setting with Lowest Margin for Order 1, Seed 0. Change both run names
+together for another matched cell:
+
+```bash
+export CANDIDATE_RUN="$MFR_OUTPUT_DIR/runs/v2_o1_dapr_weak_s0"
+export BASELINE_RUN="$MFR_OUTPUT_DIR/runs/v2_o1_lowest_margin_s0"
+```
+
+First generate the exact locked-test and XSTest responses for both adapters:
+
+```bash
+python scripts/submit_eval_carc.py generate \
+  --output-dir "$MFR_OUTPUT_DIR" \
+  --account xiangren_1987 \
+  --gpu l40s \
+  --run-dir "$CANDIDATE_RUN" \
+  --confirm-final-evaluation
+
+python scripts/submit_eval_carc.py generate \
+  --output-dir "$MFR_OUTPUT_DIR" \
+  --account xiangren_1987 \
+  --gpu l40s \
+  --run-dir "$BASELINE_RUN" \
+  --confirm-final-evaluation
+```
+
+Wait for both generation jobs to complete. Then submit WildGuard safety/XSTest scoring and IFEval for each run:
+
+```bash
+for run in "$CANDIDATE_RUN" "$BASELINE_RUN"; do
+  python scripts/submit_eval_carc.py safety \
+    --output-dir "$MFR_OUTPUT_DIR" \
+    --account xiangren_1987 \
+    --gpu l40s \
+    --run-dir "$run"
+
+  python scripts/submit_eval_carc.py ifeval \
+    --output-dir "$MFR_OUTPUT_DIR" \
+    --account xiangren_1987 \
+    --gpu l40s \
+    --run-dir "$run" \
+    --confirm-final-evaluation
+done
+```
+
+After both generation jobs finish, compare Helpful and Quality responses with Prometheus. Every response is judged
+twice with candidate/baseline positions reversed:
+
+```bash
+python scripts/submit_eval_carc.py judge \
+  --output-dir "$MFR_OUTPUT_DIR" \
+  --account xiangren_1987 \
+  --gpu l40s \
+  --time 04:00:00 \
+  --candidate-run "$CANDIDATE_RUN" \
+  --baseline-run "$BASELINE_RUN" \
+  --behaviors helpful,quality
+```
+
+Run `notebooks/09_generation_evaluation.ipynb` after all selected cells finish. It shows harm rate, over-refusal,
+unsafe refusal, IFEval, judge preference, parse failures, and position consistency. Never silently drop parse
+failures.
+
+Create a blinded human sheet on a CPU allocation after the response files exist:
+
+```bash
+export HUMAN_DIR="$MFR_OUTPUT_DIR/human_eval/o1_s0_dapr_vs_lowest"
+python scripts/prepare_human_review.py \
+  --candidate-run "$CANDIDATE_RUN" \
+  --baseline-run "$BASELINE_RUN" \
+  --output-dir "$HUMAN_DIR"
+```
+
+Give each reviewer a separate copy of `review_sheet.csv` and `INSTRUCTIONS.md`. Keep
+`PRIVATE_blinding_key.csv` hidden until every reviewer is finished. Then score two or more completed sheets:
+
+```bash
+python scripts/score_human_review.py \
+  --review-sheets "$HUMAN_DIR/reviewer_1.csv" "$HUMAN_DIR/reviewer_2.csv" \
+  --key "$HUMAN_DIR/PRIVATE_blinding_key.csv" \
+  --output-dir "$HUMAN_DIR/results"
+```
+
+Set `MFR_HUMAN_EVAL_DIR="$HUMAN_DIR/results"` before opening
+`notebooks/10_human_evaluation.ipynb`.
+
+## 10. Pinned second-model replication
+
+The second model is `meta-llama/Llama-3.2-3B-Instruct` at revision
+`0cb88a4f764b7a12671c53f0838cd831a0843b95`. It is a different model family and is still small enough for one L40S.
+Accept Meta's license on Hugging Face first. Keep its artifacts separate from the Qwen results:
+
+```bash
+export MFR_SECOND_OUTPUT_DIR=/project2/xiangren_1987/grp26-mfr-dpo/artifacts_llama32_3b
+mkdir -p "$MFR_SECOND_OUTPUT_DIR"
+read -s -p "Hugging Face token: " HF_TOKEN
+export HF_TOKEN
+```
+
+Build a new reference cache. This job first verifies that every frozen v2 pair fits under the Llama tokenizer; it
+stops instead of silently changing or truncating the dataset if any pair exceeds the 1,024-token limit:
+
+```bash
+python scripts/submit_second_model_carc.py cache \
+  --output-dir "$MFR_SECOND_OUTPUT_DIR" \
+  --account xiangren_1987 \
+  --gpu l40s \
+  --time 03:00:00
+```
+
+After the cache job completes, run the preregistered shortlist. `none` is required the first time each order–seed
+cell is run because it supplies the shared Stage-1 checkpoint:
+
+```bash
+for order in 1 2 3 4; do
+  for seed in 0 1; do
+    python scripts/submit_second_model_carc.py group \
+      --output-dir "$MFR_SECOND_OUTPUT_DIR" \
+      --account xiangren_1987 \
+      --gpu l40s \
+      --time 04:00:00 \
+      --order "$order" \
+      --seed "$seed" \
+      --methods none,random,mfr,lowest_margin,dapr_weak
+  done
+done
+```
+
+If LoRA-EWC becomes a selected headline baseline, add only its frozen coefficient to the method list before this
+replication begins. Do not choose the second-model shortlist after inspecting second-model results. Set both
+artifact variables and run `notebooks/11_second_model.ipynb` to compare within-model method differences:
+
+```bash
+export MFR_OUTPUT_DIR=/project2/xiangren_1987/grp26-mfr-dpo/artifacts
+export MFR_SECOND_OUTPUT_DIR=/project2/xiangren_1987/grp26-mfr-dpo/artifacts_llama32_3b
+```
+
+## Confirmation and evaluation commands (after `freeze-v1`)
+
+All evaluation jobs go through `scripts/submit_eval_carc.py` (add `--account`, `--dry-run` to preview).
+Qwen is the default protocol; add `--protocol configs/second_model_protocol.json` for Llama runs.
+
+```bash
+OUT=$MFR_OUTPUT_DIR
+# Locked preference test at every stage (score the `none` runs first; others copy their Stage 1)
+python scripts/submit_eval_carc.py locked-test --output-dir $OUT --run-dir $OUT/runs/v2_o1_none_s2 --confirm-final-evaluation
+# Generation: final checkpoint (test, XSTest, HarmBench), base model, post-stage checkpoint
+python scripts/submit_eval_carc.py generate --output-dir $OUT --run-dir $OUT/runs/v2_o1_dapr_weak_s2 --confirm-final-evaluation
+python scripts/submit_eval_carc.py generate --output-dir $OUT --base-model --confirm-final-evaluation
+python scripts/submit_eval_carc.py generate --output-dir $OUT --run-dir $OUT/runs/v2_o1_dapr_weak_s2 --checkpoint post_stage --behavior safe --confirm-final-evaluation
+# Grading
+python scripts/submit_eval_carc.py safety --output-dir $OUT --run-dir $OUT/runs/v2_o1_dapr_weak_s2
+python scripts/submit_eval_carc.py safety --output-dir $OUT --run-dir $OUT/runs/v2_o1_dapr_weak_s2 --checkpoint post_stage --behavior safe
+python scripts/submit_eval_carc.py ifeval --output-dir $OUT --run-dir $OUT/runs/v2_o1_dapr_weak_s2 --confirm-final-evaluation
+# Judge: validate once first, then cross-method and within-run (behavioral forgetting)
+python scripts/submit_eval_carc.py validate-judge --output-dir $OUT
+python scripts/submit_eval_carc.py judge --output-dir $OUT --candidate-run $OUT/runs/v2_o1_dapr_weak_s2 --baseline-run $OUT/runs/v2_o1_lowest_margin_s2
+python scripts/submit_eval_carc.py judge --output-dir $OUT --within-run $OUT/runs/v2_o1_dapr_weak_s2
+# Gradient conflict at the start of stage 2
+python scripts/submit_eval_carc.py gradient-conflict --output-dir $OUT --run-dir $OUT/runs/v2_o1_none_s0 --stage 2
+# Llama joint reference
+python scripts/submit_second_model_carc.py joint --output-dir $LLAMA_OUT --seed 0
+```
+
+Statistics (CPU): `cells = mfr_stats.cell_metrics(mfr_analysis.load_locked_test(OUT))`, then
+`mfr_stats.primary_analysis(cells, look=1)`; the returned decision is `stop` or `extend`.
+Seeds 5–9 are accepted only for `none`, `random`, `lowest_margin`, `dapr_weak`.

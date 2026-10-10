@@ -60,6 +60,15 @@ def parse_args():
     return parser.parse_args()
 
 
+def seed_allowed(settings, seed, methods):
+    """Confirmation seeds allow every method; predeclared extension seeds allow only the
+    extension methods (two-look design, docs/FREEZE.md)."""
+    if seed in settings.get("seeds", []):
+        return True
+    extension = settings.get("extension_methods", [])
+    return seed in settings.get("extension_seeds", []) and all(m in extension for m in methods)
+
+
 def protocol():
     with open(ROOT / "configs" / "experiment_protocol.json", encoding="utf-8") as handle:
         return json.load(handle)
@@ -68,13 +77,16 @@ def protocol():
 def validate_group(args, settings):
     if str(args.order) not in settings["orders"]:
         raise ValueError(f"unknown order {args.order}; configured orders: {list(settings['orders'])}")
-    if args.seed not in settings.get("seeds", []):
-        raise ValueError(f"unknown seed {args.seed}; configured seeds: {settings.get('seeds', [])}")
     configured = settings.get("methods", []) + settings.get("secondary_methods", [])
     methods = configured if not args.methods else [m.strip() for m in args.methods.split(",") if m.strip()]
     unknown = [method for method in methods if method not in configured]
     if unknown:
         raise ValueError(f"unknown methods {unknown}; configured methods: {configured}")
+    if not seed_allowed(settings, args.seed, methods):
+        raise ValueError(
+            f"seed {args.seed} is not allowed for {methods}; extension seeds "
+            f"{settings.get('extension_seeds', [])} are only for {settings.get('extension_methods', [])}"
+        )
     return methods
 
 

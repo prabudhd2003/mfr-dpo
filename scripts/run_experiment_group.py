@@ -13,6 +13,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def seed_allowed(settings, seed, methods):
+    """Confirmation seeds allow every method; predeclared extension seeds allow only the
+    extension methods (two-look design, docs/FREEZE.md)."""
+    if seed in settings.get("seeds", []):
+        return True
+    extension = settings.get("extension_methods", [])
+    return seed in settings.get("extension_seeds", []) and all(m in extension for m in methods)
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", required=True)
@@ -23,11 +32,15 @@ def parse_args():
         help="Comma-separated methods. Default: every core and secondary method in the protocol.",
     )
     parser.add_argument("--reference-cache", required=True)
+    parser.add_argument(
+        "--protocol", default=str(ROOT / "configs" / "experiment_protocol.json"),
+        help="Authoritative protocol JSON",
+    )
     return parser.parse_args()
 
 
-def load_protocol():
-    with open(ROOT / "configs" / "experiment_protocol.json", encoding="utf-8") as handle:
+def load_protocol(path=ROOT / "configs" / "experiment_protocol.json"):
+    with open(path, encoding="utf-8") as handle:
         return json.load(handle)
 
 
@@ -67,7 +80,8 @@ def first_unfinished_stage(run_dir, initial_stage, n_stages):
     return max(initial_stage, finished + 1)
 
 
-def run_one(output_dir, cache, order, seed, method, stage1_source, n_stages, data_version):
+def run_one(output_dir, cache, order, seed, method, stage1_source, n_stages, data_version,
+            protocol_path):
     run_name = f"{data_version}_o{order}_{method}_s{seed}"
     run_dir = output_dir / "runs" / run_name
     initial_stage = 1 if method == "none" else 2
@@ -92,6 +106,8 @@ def run_one(output_dir, cache, order, seed, method, stage1_source, n_stages, dat
         str(start_stage),
         "--reference-cache",
         str(cache),
+        "--protocol",
+        str(protocol_path),
     ]
     if method != "none":
         command.extend(["--stage1-from", str(stage1_source)])
@@ -104,12 +120,11 @@ def run_one(output_dir, cache, order, seed, method, stage1_source, n_stages, dat
 
 def main():
     args = parse_args()
-    protocol = load_protocol()
+    protocol_path = Path(args.protocol).expanduser().resolve()
+    protocol = load_protocol(protocol_path)
     order_key = str(args.order)
     if order_key not in protocol["orders"]:
         raise ValueError(f"unknown order {args.order}; configured orders: {list(protocol['orders'])}")
-    if args.seed not in protocol.get("seeds", []):
-        raise ValueError(f"unknown seed {args.seed}; configured seeds: {protocol.get('seeds', [])}")
 
     output_dir = Path(args.output_dir).expanduser().resolve()
     cache = Path(args.reference_cache).expanduser().resolve()
@@ -120,6 +135,12 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     methods = requested_methods(protocol, args.methods)
+    if not seed_allowed(protocol, args.seed, methods):
+        raise ValueError(
+            f"seed {args.seed} is not allowed for methods {methods}; confirmation seeds "
+            f"{protocol.get('seeds', [])}, extension seeds {protocol.get('extension_seeds', [])} "
+            f"only for {protocol.get('extension_methods', [])}"
+        )
     data_version = protocol["data_version"]
     none_run = output_dir / "runs" / f"{data_version}_o{args.order}_none_s{args.seed}"
 
@@ -127,7 +148,7 @@ def main():
     if "none" in methods:
         run_one(
             output_dir, cache, args.order, args.seed, "none", none_run,
-            len(protocol["orders"][order_key]), data_version,
+            len(protocol["orders"][order_key]), data_version, protocol_path,
         )
     if not (none_run / "COMPLETE.json").exists():
         raise RuntimeError(
@@ -139,7 +160,7 @@ def main():
             continue
         run_one(
             output_dir, cache, args.order, args.seed, method, none_run,
-            len(protocol["orders"][order_key]), data_version,
+            len(protocol["orders"][order_key]), data_version, protocol_path,
         )
 
     print(f"\nAll requested methods finished for order {args.order}, seed {args.seed}.", flush=True)

@@ -21,6 +21,10 @@ SCIENTIFIC_CODE_PATHS = (
     "src/mfr_utils.py",
 )
 STAGE1_ALGORITHM_VERSION = "1.0"
+# Llama 3.x chat templates insert today's date (strftime_now) into every prompt. Pinning it to the
+# template's own fallback date keeps prompts, token counts, and reference caches identical across
+# days. Templates without strftime_now (e.g. Qwen2.5) are unchanged.
+FIXED_CHAT_TEMPLATE_DATE = "26 Jul 2024"
 
 
 def seed_everything(seed):
@@ -104,12 +108,44 @@ def load_protocol(path="configs/experiment_protocol.json"):
     if (not isinstance(protocol["ewc_fisher_batch_size"], int)
             or protocol["ewc_fisher_batch_size"] <= 0):
         raise ValueError("ewc_fisher_batch_size must be a positive integer")
+    seeds = protocol.get("seeds", [])
+    extension_seeds = protocol.get("extension_seeds", [])
+    extension_methods = protocol.get("extension_methods", [])
+    if set(seeds) & set(extension_seeds):
+        raise ValueError("extension_seeds must not overlap the confirmation seeds")
+    if extension_seeds and not extension_methods:
+        raise ValueError("extension_seeds require a non-empty extension_methods list")
+    if unknown := [method for method in extension_methods if method not in known_methods]:
+        raise ValueError(f"extension_methods names unknown methods {unknown}")
+    if extension_methods and "none" not in extension_methods:
+        raise ValueError("extension_methods must include none, which supplies Stage 1 for the others")
     joint_seeds = protocol["joint_seeds"]
     if (not isinstance(joint_seeds, list) or not joint_seeds
             or any(not isinstance(seed, int) or seed < 0 for seed in joint_seeds)
             or len(joint_seeds) != len(set(joint_seeds))):
         raise ValueError("joint_seeds must be a non-empty list of unique non-negative integers")
     return protocol
+
+
+def allowed_seeds(protocol, method):
+    """Seeds a method may run with: the confirmation seeds, plus the predeclared two-look
+    extension seeds for the extension methods only (see docs/FREEZE.md)."""
+    seeds = list(protocol.get("seeds", []))
+    if method in protocol.get("extension_methods", []):
+        seeds += list(protocol.get("extension_seeds", []))
+    return seeds
+
+
+def pin_chat_template_date(tokenizer, date=FIXED_CHAT_TEMPLATE_DATE):
+    """Replace a date-dependent chat template with a fixed date, in place. Returns the tokenizer."""
+    template = getattr(tokenizer, "chat_template", None)
+    if isinstance(template, str) and "strftime_now" in template:
+        pinned = template.replace('strftime_now("%d %b %Y")', f'"{date}"')
+        pinned = pinned.replace("strftime_now('%d %b %Y')", f'"{date}"')
+        if "strftime_now" in pinned:
+            raise ValueError("chat template uses strftime_now in an unrecognized form; cannot pin date")
+        tokenizer.chat_template = pinned
+    return tokenizer
 
 
 def method_old_per_step(protocol, method):
