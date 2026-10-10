@@ -21,6 +21,9 @@ The methods differ in which stored pairs fill the replay slots of each training 
     dapr_c          DAPR with common-shift-centred token anchoring
     mir_dpo         largest one-step increase in old-pair DPO loss (MIR adapted to DPO)
     copr_adapted    lowest-margin replay plus a peak pair-distribution constraint
+    ewc_0_1         no replay; LoRA-EWC parameter regularization with coefficient 0.1
+    ewc_1           no replay; LoRA-EWC parameter regularization with coefficient 1
+    ewc_10          no replay; LoRA-EWC parameter regularization with coefficient 10
 
 Everything here is CPU-only and fully seeded: which pairs enter the buffer depends on the run seed
 and the dataset, never on the method, so every method stores exactly the same candidate pairs.
@@ -34,7 +37,9 @@ from mfr_utils import buffer_seed
 METHODS = (
     "none", "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr",
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
+    "ewc_0_1", "ewc_1", "ewc_10",
 )
+REGULARIZATION_METHODS = ("ewc_0_1", "ewc_1", "ewc_10")
 REFRESH_METHODS = (
     "lowest_margin", "mfr", "fmcr", "cpmr", "dapr", "dapr_weak", "dapr_gated",
     "dapr_c", "mir_dpo", "copr_adapted",
@@ -73,6 +78,13 @@ def needs_refresh(method):
     if method not in METHODS:
         raise ValueError(f"unknown replay method {method!r}; expected one of {METHODS}")
     return method in REFRESH_METHODS
+
+
+def uses_replay(method):
+    """Whether the method places stored pairs in later training batches."""
+    if method not in METHODS:
+        raise ValueError(f"unknown replay method {method!r}; expected one of {METHODS}")
+    return method != "none" and method not in REGULARIZATION_METHODS
 
 
 class ReplayBuffer:
@@ -324,7 +336,7 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
     """Return the replay plan with auditable rank, score, dataset, and selection rule."""
     if method not in METHODS:
         raise ValueError(f"unknown replay method {method!r}; expected one of {METHODS}")
-    if method == "none" or buffer is None or len(buffer) == 0 or n_slots <= 0:
+    if not uses_replay(method) or buffer is None or len(buffer) == 0 or n_slots <= 0:
         columns = (FMCR_PLAN_COLUMNS if method == "fmcr" else
                    CPMR_PLAN_COLUMNS if method == "cpmr" else
                    MIR_PLAN_COLUMNS if method == "mir_dpo" else PLAN_COLUMNS)

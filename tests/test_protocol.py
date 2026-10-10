@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-from mfr_utils import (load_protocol, method_anchor_strength, method_old_per_step,
+from mfr_utils import (load_protocol, method_anchor_strength, method_ewc_coefficient,
+                       method_old_per_step,
                        validate_resume_settings,
                        stage1_compatibility_sha256, validate_stage1_source)
 
@@ -17,6 +18,7 @@ def test_protocol_uses_exact_ten_percent_replay():
     assert "cpmr" in protocol["secondary_methods"]
     assert {
         "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
+        "ewc_0_1", "ewc_1", "ewc_10",
     } <= set(protocol["secondary_methods"])
     assert protocol["orders"]["3"] == ["quality", "helpful", "safe"]
     assert protocol["orders"]["4"] == ["quality", "safe", "helpful"]
@@ -25,6 +27,14 @@ def test_protocol_uses_exact_ten_percent_replay():
     assert method_anchor_strength(protocol, "dapr") == 0.1
     assert method_anchor_strength(protocol, "dapr_weak") == 0.01
     assert method_anchor_strength(protocol, "dapr_gated") == 0.1
+    assert method_old_per_step(protocol, "ewc_0_1") == 0
+    assert method_old_per_step(protocol, "ewc_1") == 0
+    assert method_old_per_step(protocol, "ewc_10") == 0
+    assert method_ewc_coefficient(protocol, "ewc_0_1") == 0.1
+    assert method_ewc_coefficient(protocol, "ewc_1") == 1.0
+    assert method_ewc_coefficient(protocol, "ewc_10") == 10.0
+    assert protocol["ewc_fisher_pairs"] == 500
+    assert protocol["ewc_fisher_batch_size"] == 1
     assert protocol["lora_alpha"] == 32 and protocol["epochs"] == 1
 
 

@@ -12,7 +12,8 @@ import pandas as pd
 
 METHOD_ORDER = [
     "none", "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr",
-    "dapr", "dapr_c", "mir_dpo", "copr_adapted",
+    "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
+    "ewc_0_1", "ewc_1", "ewc_10",
 ]
 METHOD_COLORS = {
     "none": "#6b6a66", "random": "#2a78d6", "random_high": "#7857c5",
@@ -20,6 +21,7 @@ METHOD_COLORS = {
     "cpmr": "#7a3db8",
     "dapr": "#d68a00", "dapr_c": "#a45c00", "mir_dpo": "#008c95",
     "copr_adapted": "#b13c63",
+    "ewc_0_1": "#4c78a8", "ewc_1": "#355f8a", "ewc_10": "#1f3b57",
 }
 DATASETS = ["safe", "helpful", "quality"]
 

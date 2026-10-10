@@ -19,6 +19,7 @@ def test_default_group_contains_all_configured_methods():
     assert GROUP.requested_methods(protocol, None) == [
         "none", "random", "mfr", "random_high", "lowest_margin", "fmcr", "cpmr",
         "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
+        "ewc_0_1", "ewc_1", "ewc_10",
     ]
 
 

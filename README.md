@@ -1,6 +1,6 @@
 # MFR-DPO
 
-**What Should an LLM Rehearse? Budgeted Replay for Continual Preference Tuning**
+**What and How Should an LLM Rehearse? Budgeted Replay for Continual Preference Tuning**
 
 ## Project summary
 
@@ -17,17 +17,23 @@ drops are replayed during later training. The main question is whether this targ
 behaviors better than random replay using the same 10% replay budget, without harming the behavior currently being
 learned.
 
+The experiments now support a broader second question: **how should a selected old pair be optimized?** Directional
+Anchor for Preference Replay (DAPR) stores the learned-state token log probabilities of both responses. During later
+replay it penalizes only harmful movement—a preferred response becoming less likely or a rejected response becoming
+more likely—while allowing movement in the helpful direction. This separates replay selection from replay loss.
+
 ## What has been completed
 
 - A pilot study confirmed that sequential DPO causes measurable and concentrated forgetting.
 - Version 2 of the data was cleaned, deduplicated across all datasets and splits, length-filtered, hashed, and frozen.
 - The CARC training pipeline, reference cache, resume logic, Stage-1 reuse, progress logs, replay logs, and automated
   tests are implemented.
-- All seven methods were run for four task orders and two seeds on NVIDIA L40S GPUs: **56 completed runs**.
+- Thirteen methods were run for four task orders and two seeds on NVIDIA L40S GPUs: **104 completed development
+  runs**.
 - Notebook 07 reports the complete validation grid, paired uncertainty, per-dataset forgetting, replay-selection
   overlap, concentration, final scores, and runtime.
 
-The seven completed methods are:
+The original seven completed methods are:
 
 | Method | Meaning |
 |---|---|
@@ -40,7 +46,7 @@ The seven completed methods are:
 | CPMR 10% | Virtually train on the upcoming new-task interval and replay pairs with the lowest present-or-projected margin. |
 
 Forecasted Margin-Crossing Replay (FMCR) is a completed forecasting ablation. **Counterfactual Projected-Margin
-Replay (CPMR)** is the strongest method by aggregate point estimate. CPMR briefly simulates the exact upcoming
+Replay (CPMR)** is the strongest selection-only extension by aggregate point estimate. CPMR briefly simulates the exact upcoming
 new-task interval without replay, measures each old pair before and after that reversible lookahead, and replays the
 pairs with the lowest worst-case margin across the present and projected states. It uses the same 10% replay budget
 and 0.75 per-behavior cap as Lowest Margin. The virtual pass restores the adapter, optimizer, learning-rate schedule,
@@ -48,21 +54,31 @@ and random state before real training continues.
 
 Balanced MFR and At-Risk MFR are planned controlled ablations and are **not implemented or evaluated yet**.
 
-Six additional controlled methods are implemented as secondary comparisons or development ablations:
+Six additional controlled methods have also completed the full eight-cell development grid:
 
 | Method | Fixed-budget test |
 |---|---|
-| DAPR-Strong 10% (`dapr`) | Uses Lowest Margin retrieval, then one-sided token anchors with strength 0.1 to stop a replayed chosen response from weakening or a rejected response from strengthening beyond its peak-time state. |
-| DAPR-Weak 10% (`dapr_weak`) | Changes only DAPR's anchor strength from 0.1 to 0.01. |
+| DAPR-Strong 10% (`dapr`) | Uses Lowest Margin retrieval, then one-sided token anchors with strength 0.1 to stop a replayed chosen response from weakening or a rejected response from strengthening beyond its stored learned-state value. |
+| DAPR (`dapr_weak`, α = 0.01) | Changes only DAPR's anchor strength from 0.1 to 0.01. This is the selected DAPR setting and the current best stability–plasticity balance. |
 | DAPR-Gated 10% (`dapr_gated`) | Keeps strength 0.1 but applies the anchor only when an eval-mode, per-step live margin is below the pair's stored peak margin. |
 | DAPR-C 10% | Centers DAPR on the pair's common likelihood shift, so it constrains preference direction rather than penalizing both responses merely becoming more or less likely. |
 | MIR-DPO 10% | Performs one reversible incoming-task update and replays old pairs whose DPO loss is predicted to increase most. This is the preference-learning adaptation of MIR. |
-| COPR-adapted 10% | Uses Lowest Margin retrieval and constrains the replayed pair's two-response policy distribution toward its peak-time distribution. It is a controlled COPR-inspired adaptation, not a reproduction of full COPR. |
+| COPR-adapted 10% | Uses Lowest Margin retrieval and constrains the replayed pair's two-response policy distribution toward its stored learned-state distribution. It is a controlled COPR-inspired adaptation, not a reproduction of full COPR. |
 
 All six use exactly the same 10% replay budget, buffer, refresh schedule, behavior cap, data, and Stage-1 checkpoint
-as the established methods. Every DAPR variant, DAPR-C, and COPR-adapted saves auditable peak anchors in
-`preference_anchors.npz`; MIR-DPO saves each virtual-loss snapshot in `mir_dpo_refresh_*.csv`. DAPR-Weak and
-DAPR-Gated should be described as **implemented, not evaluated** until their eight-cell grids are complete.
+as the established methods. Every DAPR variant, DAPR-C, and COPR-adapted saves auditable learned-state anchors in
+`preference_anchors.npz`; MIR-DPO saves each virtual-loss snapshot in `mir_dpo_refresh_*.csv`.
+
+The selected method is called **DAPR** in the paper and prose. Its internal code identifier remains `dapr_weak`
+because that name was fixed before the run and is embedded in 8 completed run folders, settings files, tables, and
+hashes. Renaming those artifacts would weaken reproducibility. In figures, `dapr_weak` is displayed as
+**DAPR (α = 0.01)**, while the original α = 0.1 setting is **DAPR-Strong**.
+
+LoRA-EWC is implemented as a no-replay regularization baseline under `ewc_0_1`, `ewc_1`, and `ewc_10`. It estimates
+a diagonal Fisher from per-pair DPO-loss gradients on 500 examples and regularizes only trainable LoRA weights.
+These three coefficient settings have not been evaluated yet. They will be compared on the same eight development cells; one
+coefficient will then be frozen before unseen-seed confirmation. Balanced MFR and At-Risk MFR remain separate
+planned ablations and are intentionally left to their existing specifications.
 
 ## Data
 
@@ -114,11 +130,21 @@ between the point when it was learned and the end of training. Less negative is 
 | Random 14.3% | -5.47 | about **31%** | 71.73 | +2.47 retention, +0.96 final |
 | Lowest margin | -4.47 | about **44%** | 72.56 | +3.47 retention, +1.79 final |
 | FMCR 10% | -5.44 | about **31%** | 72.21 | +2.50 retention, +1.44 final |
-| CPMR 10% | **-4.28** | about **46%** | **72.85** | **+3.66 retention, +2.08 final** |
+| CPMR 10% | -4.28 | about **46%** | 72.85 | +3.66 retention, +2.08 final |
+| DAPR-Strong (α = 0.1) | +0.34 | about **104%** | 72.88 | +8.28 retention, +2.10 final |
+| **DAPR (α = 0.01)** | **-1.94** | about **76%** | **73.44** | **+6.00 retention, +2.67 final** |
+| DAPR-Gated (α = 0.1) | -0.16 | about **98%** | 73.21 | +7.78 retention, +2.44 final |
+| DAPR-C | +0.81 | about **110%** | 72.77 | +8.75 retention, +2.00 final |
+| MIR-DPO | -4.72 | about **41%** | 72.08 | +3.22 retention, +1.31 final |
+| COPR-adapted | -0.94 | about **88%** | 65.75 | +7.00 retention, -5.02 final |
 
 “Forgetting prevented” expresses the improvement relative to the 7.94-point forgetting observed without replay.
 For example, MFR recovers 3.06 of those 7.94 points, so it prevents approximately `3.06 / 7.94 = 39%` of the
 measured forgetting. It does **not** mean that MFR raises total model accuracy by 39%.
+
+A value above 100% means the final score on earlier behaviors is slightly higher than it was immediately after
+those behaviors were learned. This backward improvement is possible, but it does not by itself make a method good:
+DAPR-C and COPR-adapted show that very strong stability can come at the cost of learning the final behavior.
 
 In simple terms:
 
@@ -127,13 +153,14 @@ In simple terms:
 - Random 14.3% also prevents approximately **31% of the forgetting** despite using more replay examples.
 - Lowest Margin prevents approximately **44% of the forgetting**.
 - FMCR prevents approximately **31% of the forgetting** and favors final-task learning more than retention.
-- CPMR prevents approximately **46% of the forgetting**, the strongest aggregate point estimate.
+- CPMR prevents approximately **46% of the forgetting**, the strongest selection-only point estimate.
+- DAPR with α = 0.01 prevents approximately **76% of the forgetting** and has the highest final three-behavior
+  average.
 
-For additional context, final current-task accuracy was 74.81 for No Replay, 73.62 for Random 10%, 73.75 for MFR,
-73.88 for Random 14.3%, 74.31 for Lowest Margin, 74.75 for FMCR, and 74.56 for CPMR. CPMR therefore recovered
-the most retention while remaining only 0.25 points below No Replay on the final task. Average runtime was 22.48
-minutes for No Replay, 28.59 for Lowest Margin, and 48.75 for CPMR. CPMR's reversible lookahead makes it the most
-computationally expensive method.
+For additional context, final current-task accuracy was 74.81 for No Replay, 74.31 for Lowest Margin, 74.56 for
+CPMR, and 72.81 for DAPR. DAPR therefore trades 1.50 final-task points relative to Lowest Margin for 2.53 points
+better retention and a 0.87-point higher final average. Its average runtime was 29.13 minutes, close to Lowest
+Margin's 28.59 minutes and much lower than CPMR's 48.75 minutes.
 
 ### Is this size of improvement normal?
 
@@ -157,8 +184,9 @@ show how replay improvements are normally interpreted.
   backward transfer, and forgetting as separate quantities rather than judging a method from final preference score
   alone.
 
-Our results follow the same general pattern: replay changes final average accuracy by roughly 1–2 points, but it
-prevents 31–46% of the forgetting measured without replay. MFR's 0.62-point retention advantage over equal-budget
+Our selection-only replay results follow the same general pattern: they change final average accuracy by roughly
+1–2 points while preventing 31–46% of the forgetting measured without replay. DAPR changes the replay objective and
+prevents about 76%, while overly strong anchors expose a clearer stability–plasticity trade-off. MFR's 0.62-point retention advantage over equal-budget
 Random 10% is modest, but its paired 95% bootstrap interval, `[0.22, 1.09]`, excludes zero. This makes the retention
 result credible within the current experiment grid, although generation and human evaluation are still needed to
 show whether the difference is noticeable in model responses.
@@ -167,14 +195,16 @@ What these results support:
 
 - **Forgetting is real.** With no replay, earlier behaviors lost 7.94 accuracy points on average. Safety was the
   hardest behavior to retain: it lost 13.25 points with no replay.
-- **Replay helps.** Every replay method improved retention and the final three-behavior average over no replay.
+- **Replay usually helps.** The main replay methods improved retention and the final three-behavior average over no
+  replay. COPR-adapted is the exception: it retained old behavior but severely harmed new-task learning.
 - **MFR improves on equal-budget random replay.** MFR retained 0.62 points more on average. The paired 95% bootstrap
   interval was `[0.22, 1.09]`, while its final-task difference was small and uncertain.
 - **MFR also improves on higher-budget random replay.** It retained 0.59 points more and had a 0.25-point higher
   final average while using one-third fewer replay examples. MFR is slower because it must rescore the buffer.
-- **Lowest Margin is a strong baseline, but CPMR has the best aggregate point estimates.** CPMR retained 0.19 points
-  more, scored 0.25 points higher on the final task, and finished 0.29 points higher overall. These three paired
-  intervals include zero, so the current two-seed grid does not establish that CPMR reliably beats Lowest Margin.
+- **Lowest Margin is the strongest simple replay selector, and CPMR is the strongest selection-only extension by
+  point estimate.** CPMR retained 0.19 points more, scored 0.25 points higher on the final task, and finished 0.29
+  points higher overall. These three paired intervals include zero, so the current two-seed grid does not establish
+  that CPMR reliably beats Lowest Margin.
 - **The original MFR idea is promising but is not the final winner.** Historical margin decline contains useful
   information, but the current results show that present difficulty is a very strong replay signal.
 - **FMCR is a useful forecasting ablation with a mixed result.** It did not improve retention over Random 10%, but
@@ -188,10 +218,21 @@ What these results support:
 - **CPMR is related to, but not identical to, Lowest Margin.** Their mean distinct-pair Jaccard overlap is 0.55 and
   chance-adjusted overlap is 0.67. CPMR's overlap with Random 10% is only 0.04, showing that its selections are
   targeted rather than effectively random.
+- **DAPR with α = 0.01 is the best observed stability–plasticity balance.** Compared with Lowest Margin, it improves
+  retention by 2.53 points, gives up 1.50 final-task points, and raises the final three-behavior average by 0.87.
+  The retention interval `[1.16, 3.84]` excludes zero, while the final-average interval `[-0.12, 2.04]` does not.
+  DAPR retains better in 7 of 8 cells and has a higher final average in 6 of 8. This is promising development
+  evidence, not final confirmation.
+- **Strong anchoring can overprotect.** DAPR-Strong and DAPR-C nearly eliminate measured forgetting but learn the
+  final behavior less well. DAPR-Gated activates its strong anchor on about 30% of replay occurrences and falls
+  between the strong and selected settings. The coefficient is therefore scientifically important.
+- **COPR-adapted is a useful negative result.** It sharply reduces forgetting but lowers the final average below No
+  Replay. It shows that preserving an old pair distribution too rigidly is not enough; plasticity must be measured.
 
-These are validation results from two seeds, not final test results. They support a controlled project conclusion,
-but not a broad claim that CPMR is universally better. Balanced MFR and At-Risk MFR will separately test behavior
-allocation and actual current preference failure. Unseen seeds must confirm the CPMR result before the locked test.
+These are development-validation results from two seeds, not final test results. They support a controlled project
+conclusion, but not a broad claim that DAPR is universally better. LoRA-EWC will test whether standard parameter
+regularization explains DAPR's gain. Balanced MFR and At-Risk MFR will separately test behavior allocation and
+actual current preference failure. Unseen seeds must confirm the frozen method before the locked test.
 
 ## How the results fit together
 
@@ -204,11 +245,15 @@ The project is not simply a contest to make MFR win. The report tells a sequence
 4. Present difficulty is even stronger than historical decline in this setup: Lowest Margin beats original MFR.
 5. Forecasting is not automatically better. FMCR improves current-task learning and the final average relative to
    random replay, but its retention is similar to random and worse than Lowest Margin.
-6. A forecast grounded in the actual upcoming updates works better: CPMR combines current difficulty with a
-   reversible interval-level simulation and achieves the best aggregate retention and final average. It clearly
-   beats random replay, while its small advantage over Lowest Margin remains uncertain.
-7. Balanced MFR and At-Risk MFR are remaining controlled ablations that will test whether allocation and actual
-   policy failure explain the remaining gap.
+6. A forecast grounded in the actual upcoming updates works better than the simpler forecast: CPMR clearly beats
+   random replay, while its small advantage over Lowest Margin remains uncertain.
+7. Replay selection is only half of the problem. DAPR uses Lowest Margin retrieval but changes the replay loss with
+   one-sided learned-state token anchors. With α = 0.01 it produces the highest final three-behavior average and a
+   much better retention–plasticity balance than Lowest Margin.
+8. Stronger is not automatically better: DAPR-Strong, DAPR-C, and COPR-adapted protect old behavior more strongly
+   but suppress new-task learning. DAPR-Gated is intermediate.
+9. LoRA-EWC is the next standard regularization control. Balanced MFR and At-Risk MFR remain controlled selection
+   ablations for allocation and current preference failure.
 
 This supports a broader contribution: a controlled study of **what an LLM should rehearse during continual
 preference tuning**, including positive and negative results, rather than an unsupported claim that one heuristic is
@@ -223,11 +268,11 @@ redirecting harmful requests. This makes the three behaviors related, but not in
 
 The measured forgetting reflects that difference:
 
-| Earlier behavior | No replay | Random 10% | MFR 10% | Lowest margin | FMCR 10% | CPMR 10% |
+| Earlier behavior | No replay | Random 10% | MFR 10% | Lowest margin | CPMR 10% | **DAPR (α=.01)** |
 |---|---:|---:|---:|---:|---:|---:|
-| Helpful (6 cells) | -6.25 | -4.50 | -4.83 | -4.42 | -4.17 | **-3.92** |
-| Safe (6 cells) | -13.25 | -8.75 | -7.33 | **-6.67** | -8.58 | -7.00 |
-| Quality (4 cells) | -2.50 | -2.12 | -1.25 | -1.25 | -2.62 | **-0.75** |
+| Helpful (6 cells) | -6.25 | -4.50 | -4.83 | -4.42 | -3.92 | **-3.58** |
+| Safe (6 cells) | -13.25 | -8.75 | -7.33 | -6.67 | -7.00 | **-1.50** |
+| Quality (4 cells) | -2.50 | -2.12 | -1.25 | -1.25 | -0.75 | **-0.12** |
 
 Safety is the most fragile behavior and Quality is the most stable. A plausible explanation is that later helpfulness
 or quality tuning rewards broadly useful responses and can weaken refusal behavior, while helpfulness and quality
@@ -236,12 +281,12 @@ generation and error analyses must inspect actual responses.
 
 Average retention also changes by order:
 
-| Order | Sequence | No replay | MFR 10% | Lowest margin | FMCR 10% | CPMR 10% |
+| Order | Sequence | No replay | MFR 10% | Lowest margin | CPMR 10% | **DAPR (α=.01)** |
 |---:|---|---:|---:|---:|---:|---:|
-| 1 | Helpful → Safe → Quality | -9.75 | -5.38 | **-5.12** | -5.75 | -6.25 |
-| 2 | Safe → Helpful → Quality | -13.00 | -9.25 | -8.50 | -8.75 | **-7.25** |
-| 3 | Quality → Helpful → Safe | -4.38 | -1.50 | -1.25 | -3.12 | **-1.00** |
-| 4 | Quality → Safe → Helpful | -4.62 | -3.38 | -3.00 | -4.12 | **-2.62** |
+| 1 | Helpful → Safe → Quality | -9.75 | -5.38 | -5.12 | -6.25 | **-2.50** |
+| 2 | Safe → Helpful → Quality | -13.00 | -9.25 | -8.50 | -7.25 | **-3.38** |
+| 3 | Quality → Helpful → Safe | -4.38 | -1.50 | -1.25 | -1.00 | **-1.00** |
+| 4 | Quality → Safe → Helpful | -4.62 | -3.38 | -3.00 | -2.62 | **-0.88** |
 
 Order 2 is hardest because Safety is learned first, is the most fragile behavior, and must survive two later stages.
 Orders 3 and 4 look easier partly because stable Quality is placed earlier while either Safety or Helpfulness is last

@@ -61,7 +61,8 @@ def load_protocol(path="configs/experiment_protocol.json"):
                 "lora_r", "lora_alpha", "lora_dropout", "epochs", "learning_rate", "beta",
                 "new_per_step", "old_per_step", "buffer_size", "refreshes",
                 "fmcr_velocity_decay", "fmcr_forecast_horizon"}
-    required |= {"anchor_strength", "dapr_huber_delta", "mir_lookahead_steps"}
+    required |= {"anchor_strength", "dapr_huber_delta", "mir_lookahead_steps",
+                 "ewc_coefficients", "ewc_fisher_pairs", "ewc_fisher_batch_size"}
     missing = required - set(protocol)
     if missing:
         raise ValueError(f"protocol is missing {sorted(missing)}")
@@ -89,8 +90,18 @@ def load_protocol(path="configs/experiment_protocol.json"):
     for method, old_per_step in protocol.get("old_per_step_overrides", {}).items():
         if method not in known_methods:
             raise ValueError(f"old_per_step override names unknown method {method!r}")
-        if not isinstance(old_per_step, int) or old_per_step <= 0:
-            raise ValueError(f"old_per_step override for {method!r} must be a positive integer")
+        if not isinstance(old_per_step, int) or old_per_step < 0:
+            raise ValueError(f"old_per_step override for {method!r} must be a non-negative integer")
+    for method, coefficient in protocol.get("ewc_coefficients", {}).items():
+        if method not in known_methods:
+            raise ValueError(f"EWC coefficient names unknown method {method!r}")
+        if not isinstance(coefficient, (int, float)) or coefficient < 0:
+            raise ValueError(f"EWC coefficient for {method!r} must be non-negative")
+    if not isinstance(protocol["ewc_fisher_pairs"], int) or protocol["ewc_fisher_pairs"] <= 0:
+        raise ValueError("ewc_fisher_pairs must be a positive integer")
+    if (not isinstance(protocol["ewc_fisher_batch_size"], int)
+            or protocol["ewc_fisher_batch_size"] <= 0):
+        raise ValueError("ewc_fisher_batch_size must be a positive integer")
     return protocol
 
 
@@ -104,6 +115,11 @@ def method_anchor_strength(protocol, method):
     return float(
         protocol.get("anchor_strength_overrides", {}).get(method, protocol["anchor_strength"])
     )
+
+
+def method_ewc_coefficient(protocol, method):
+    """Return the frozen LoRA-EWC coefficient, or zero for a non-EWC method."""
+    return float(protocol.get("ewc_coefficients", {}).get(method, 0.0))
 
 
 def file_sha256(path, chunk_size=1024 * 1024):
@@ -206,7 +222,8 @@ def validate_resume_settings(settings, saved):
             "lora_dropout", "epochs", "micro_batch", "fmcr_velocity_decay",
             "fmcr_forecast_horizon", "anchor_strength", "dapr_huber_delta",
             "mir_lookahead_steps", "cpmr_rule", "dapr_rule", "mir_dpo_rule",
-            "copr_adapted_rule", "stage1_run_name", "scientific_code_sha256")
+            "copr_adapted_rule", "ewc_rule", "ewc_coefficient", "ewc_fisher_pairs",
+            "ewc_fisher_batch_size", "stage1_run_name", "scientific_code_sha256")
     mismatches = {key: (settings.get(key), saved.get(key))
                   for key in keys if settings.get(key) != saved.get(key)}
     if mismatches:

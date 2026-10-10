@@ -21,7 +21,10 @@
     "dapr_gated",
     "dapr_c",
     "mir_dpo",
-    "copr_adapted"
+    "copr_adapted",
+    "ewc_0_1",
+    "ewc_1",
+    "ewc_10"
   ],
   "seeds": [0, 1],
   "train_pairs": 2000,
@@ -37,7 +40,10 @@
   "new_per_step": 18,
   "old_per_step": 2,
   "old_per_step_overrides": {
-    "random_high": 3
+    "random_high": 3,
+    "ewc_0_1": 0,
+    "ewc_1": 0,
+    "ewc_10": 0
   },
   "micro_batch": 2,
   "buffer_size": 500,
@@ -52,6 +58,13 @@
   },
   "dapr_huber_delta": 1.0,
   "mir_lookahead_steps": 1,
+  "ewc_coefficients": {
+    "ewc_0_1": 0.1,
+    "ewc_1": 1.0,
+    "ewc_10": 10.0
+  },
+  "ewc_fisher_pairs": 500,
+  "ewc_fisher_batch_size": 1,
   "primary_metric": "accuracy",
   "secondary_metric": "accuracy_sum",
   "new_learning_tolerance_points": 2.0,

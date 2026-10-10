@@ -125,6 +125,18 @@ def test_replay_slots_per_step():
         assert set(log["dataset"]) == {"safe"}
     history, log = run("none")
     assert (history["n_replay"] == 0).all() and len(log) == 0
+    for method in ("ewc_0_1", "ewc_1", "ewc_10"):
+        history, log = run(method)
+        assert (history["n_replay"] == 0).all() and len(log) == 0
+
+
+def test_ewc_is_regularization_without_replay_selection():
+    for method in ("ewc_0_1", "ewc_1", "ewc_10"):
+        assert not mfr_replay.uses_replay(method)
+        plan = mfr_replay.plan_interval_details(
+            buffer_with(), method, n_slots=20, rng=np.random.default_rng(0)
+        )
+        assert plan.empty
 
 
 def test_no_replay_without_a_buffer():

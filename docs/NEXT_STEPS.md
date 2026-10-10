@@ -1,6 +1,25 @@
 # Method Development and Final Steps
 
-## 1. Completed method: Counterfactual Projected-Margin Replay
+## 1. Current result: DAPR is the provisional development winner
+
+The full 13-method, eight-cell development grid is complete. The selected DAPR setting uses Lowest Margin retrieval
+and a one-sided learned-state token anchor with `anchor_strength = 0.01`. Its internal method name is `dapr_weak`,
+but the paper and figures call it **DAPR (α = 0.01)**. The old identifier remains in code and artifacts so the
+completed runs stay reproducible.
+
+| Method | Average retention change | Final current-task score | Final three-behavior average | Runtime |
+|---|---:|---:|---:|---:|
+| Random 10% | -5.50 | 73.62 | 71.71 | 24.28 min |
+| Original MFR | -4.88 | 73.75 | 71.98 | 28.28 min |
+| Lowest Margin | -4.47 | 74.31 | 72.56 | 28.59 min |
+| CPMR | -4.28 | 74.56 | 72.85 | 48.75 min |
+| **DAPR (α = 0.01)** | **-1.94** | 72.81 | **73.44** | 29.13 min |
+
+DAPR improves retention over Lowest Margin by 2.53 points and final average by 0.87, while giving up 1.50 points on
+the final task. The paired retention interval excludes zero; the final-average interval does not. It is therefore
+the best observed balance and the provisional confirmation method, not yet a final proven winner.
+
+## 2. Completed selection method: Counterfactual Projected-Margin Replay
 
 CPMR is implemented as a preference-specific, interval-level interference method. At each replay refresh it:
 
@@ -34,7 +53,7 @@ CPMR has now been run for all four orders and both seeds. The completed validati
 | Lowest Margin | -4.47 | 74.31 | 72.56 | 28.59 min |
 | CPMR | **-4.28** | **74.56** | **72.85** | 48.75 min |
 
-CPMR has the best aggregate retention and final-average point estimates. Against equal-budget Random 10%, it
+Among selection-only methods, CPMR has the best aggregate retention and final-average point estimates. Against equal-budget Random 10%, it
 improved retention by 1.22 points with a paired 95% interval of `[0.50, 1.94]`, final-task accuracy by 0.94 points
 with an interval of `[0.31, 1.56]`, and final average by 1.15 points with an interval of `[0.71, 1.56]`. These are
 the strongest completed comparisons because every interval excludes zero.
@@ -48,11 +67,18 @@ of 0.67. CPMR and Random 10% overlap by only 0.04. CPMR therefore often agrees w
 while making a clearly targeted, non-random modification. The main drawback is computation: its reversible
 lookahead raises mean runtime by about 20 minutes relative to Lowest Margin.
 
-## 2. Finish Balanced MFR and At-Risk MFR
+## 3. Run the LoRA-EWC development sweep
+
+LoRA-EWC is now implemented as a no-replay regularization baseline. Run coefficients 0.1, 1, and 10 on the existing
+eight development cells using the commands in `docs/CARC.md`. Select one coefficient by the frozen tolerance and
+final-average rule, then keep only that coefficient in confirmation. This tests whether standard parameter
+protection can explain DAPR's gain.
+
+## 4. Finish Balanced MFR and At-Risk MFR
 
 Next, implement, test, and run both methods for all four orders and both seeds.
 
-## 3. Verify the run grid
+## 5. Verify the run grid
 
 There should be eight completed runs for each new method:
 
@@ -66,7 +92,7 @@ the same data manifest, model revision, common hyperparameters, order, seed, and
 
 Do not move to the locked test if any cell is missing or incompatible.
 
-## 4. Extend the validation analysis
+## 6. Extend the validation analysis
 
 Notebook 07 already includes CPMR throughout the full grid. After Balanced MFR and At-Risk MFR are complete, add
 them to:
@@ -94,7 +120,7 @@ The key comparisons are:
 4. Best MFR variant vs Random 10% — does targeted replay beat an equal-budget random baseline?
 5. Best MFR variant vs Random 14.3% — is targeting more data-efficient than extra random replay?
 
-## 5. Perform mechanism analysis
+## 7. Perform mechanism analysis
 
 Notebook 07 now reports selection overlap, repeat concentration, behavior allocation, interval-to-interval
 stability, and CPMR projection diagnostics. Extend the same analysis to each remaining targeted method and report:
@@ -109,7 +135,7 @@ stability, and CPMR projection diagnostics. Extend the same analysis to each rem
 
 This analysis explains *why* a method wins or loses and is necessary for a meaningful report.
 
-## 6. Freeze the development decision
+## 8. Freeze the development decision
 
 Write the selection rule before looking at the locked test. A reasonable rule is:
 
@@ -122,7 +148,7 @@ Write the selection rule before looking at the locked test. A reasonable rule is
 Record the chosen method, checkpoint rule, metrics, and exact Git commit. After this point, do not tune the method on
 locked-test outcomes.
 
-## 7. Completed ablation: Forecasted Margin-Crossing Replay
+## 9. Completed ablation: Forecasted Margin-Crossing Replay
 
 **Forecasted Margin-Crossing Replay (FMCR)** was evaluated in all four orders and both seeds. It replays pairs
 predicted to cross into failure at the next refresh rather than waiting until they have already failed.
@@ -185,22 +211,23 @@ trajectory of two preference-pair margins and replaying before a meaningful pref
 a virtual gradient update. No exact prior method was found in the literature search, but the paper should still use
 the careful wording **“to our knowledge”** and include a complete related-work review.
 
-## 8. Confirm on unseen seeds
+## 10. Confirm on unseen seeds
 
 Seeds 0 and 1 have been used for development. After the remaining variants are evaluated and the final method is
-selected, add unseen seeds such as 2, 3, and 4 to the protocol and run a confirmation grid. CPMR is the current
-provisional winner. At minimum include:
+selected, add unseen seeds such as 2, 3, and 4 to the protocol and run a confirmation grid. DAPR with α = 0.01 is
+the current provisional winner. At minimum include:
 
 - no replay;
 - Random 10%;
 - original MFR;
 - lowest margin;
+- the selected LoRA-EWC coefficient;
 - the selected final method.
 
 Run all four orders. Do not select a different method after seeing the confirmation results. More independent seeds
 are more valuable now than increasing the current 2,000 training pairs.
 
-## 9. Run the locked test once
+## 11. Run the locked test once
 
 After the method and statistical plan are frozen:
 
@@ -212,7 +239,7 @@ After the method and statistical plan are frozen:
 
 The locked test is for final confirmation, not method development.
 
-## 10. Evaluate generated responses
+## 12. Evaluate generated responses
 
 Preference-pair accuracy does not prove that generated answers are helpful, safe, or high quality. Generate responses
 from the final checkpoints using the frozen deterministic generation settings, then evaluate:
@@ -225,13 +252,13 @@ from the final checkpoints using the frozen deterministic generation settings, t
 
 Use the same prompt sets and generation settings for every compared method.
 
-## 11. Conduct blinded human evaluation
+## 13. Conduct blinded human evaluation
 
 Create a small, balanced prompt sample across all three behaviors. Hide method names, randomize response order, and
 ask reviewers to judge the relevant criteria. Record the rubric, reviewer agreement, ties, and uncertainty. Human
 evaluation should support—not replace—the automatic and preference-pair metrics.
 
-## 12. Complete the report and presentation
+## 14. Complete the report and presentation
 
 The final report should clearly separate:
 
@@ -244,9 +271,9 @@ The final report should clearly separate:
 
 A defensible final contribution is a controlled study of which preference pairs should be replayed during continual
 DPO. The current evidence supports a progression from historical forgetting, to present difficulty, to
-counterfactual interference from the actual upcoming updates. CPMR is the strongest aggregate method so far, but
-its advantage over Lowest Margin must be confirmed on unseen seeds and the locked test before it is presented as a
-reliable win.
+counterfactual interference from the actual upcoming updates, and finally the objective used to preserve selected
+pairs. DAPR has the strongest observed stability–plasticity balance, but it must beat the selected LoRA-EWC baseline
+and hold up on unseen seeds, generation evaluation, and the locked test before it is presented as a reliable win.
 
 ## Completion checklist
 
@@ -256,6 +283,10 @@ reliable win.
 - [x] CPMR run and analyzed in all eight cells
 - [x] FMCR run and analyzed in all eight cells
 - [x] Current seven-method validation and CPMR mechanism analysis complete
+- [x] DAPR variants, MIR-DPO, and COPR-adapted run and analyzed in all eight cells
+- [x] LoRA-EWC coefficients implemented and tested
+- [ ] LoRA-EWC coefficients 0.1, 1, and 10 run in all eight cells
+- [ ] One LoRA-EWC coefficient selected and frozen
 - [ ] Balanced MFR and At-Risk MFR added to the full analysis
 - [ ] Final method and statistical plan frozen
 - [ ] Unseen-seed confirmation complete

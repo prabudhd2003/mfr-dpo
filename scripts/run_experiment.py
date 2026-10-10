@@ -16,7 +16,8 @@ import mfr_data
 import mfr_dpo
 from mfr_replay import METHODS as IMPLEMENTED_METHODS, ReplayBuffer
 from mfr_utils import (file_sha256, load_protocol, mark_run_complete, method_anchor_strength,
-                       method_old_per_step, run_info, save_json_atomic, seed_everything, stage_seed,
+                       method_ewc_coefficient, method_old_per_step, run_info, save_json_atomic,
+                       seed_everything, stage_seed,
                        stage1_compatibility_sha256,
                        validate_resume_settings, validate_stage1_source)
 
@@ -130,10 +131,11 @@ def main():
         raise ValueError(f"start stage must be between 1 and {n_stages}")
     old_per_step = method_old_per_step(protocol, args.method)
     anchor_strength = method_anchor_strength(protocol, args.method)
+    ewc_coefficient = method_ewc_coefficient(protocol, args.method)
     run_name = f"{protocol['data_version']}_o{args.order}_{args.method}_s{args.seed}"
     print(
         f"Starting {run_name}: order={' -> '.join(order)}, "
-        f"batch={protocol['new_per_step']} new + {old_per_step if args.method != 'none' else 0} replay",
+        f"batch={protocol['new_per_step']} new + {old_per_step} replay",
         flush=True,
     )
     artifact_root = Path(args.output_dir).expanduser().resolve()
@@ -170,6 +172,11 @@ def main():
         "anchor_strength": anchor_strength,
         "dapr_huber_delta": protocol["dapr_huber_delta"],
         "mir_lookahead_steps": protocol["mir_lookahead_steps"],
+        "ewc_coefficient": (ewc_coefficient if args.method in mfr_dpo.EWC_METHODS else None),
+        "ewc_fisher_pairs": (protocol["ewc_fisher_pairs"]
+                             if args.method in mfr_dpo.EWC_METHODS else None),
+        "ewc_fisher_batch_size": (protocol["ewc_fisher_batch_size"]
+                                  if args.method in mfr_dpo.EWC_METHODS else None),
         "cpmr_rule": ("min_current_projected_one_refresh_interval_v1"
                       if args.method == "cpmr" else None),
         "dapr_rule": ("lowest_margin_directional_peak_token_anchor_v1"
@@ -184,6 +191,8 @@ def main():
                          if args.method == "mir_dpo" else None),
         "copr_adapted_rule": ("lowest_margin_peak_pair_distribution_mse_v1"
                               if args.method == "copr_adapted" else None),
+        "ewc_rule": ("multi_anchor_diagonal_empirical_fisher_lora_only_v1"
+                     if args.method in mfr_dpo.EWC_METHODS else None),
     }
     settings["stage1_compatibility_sha256"] = stage1_compatibility_sha256(settings)
     current_info = run_info(ROOT)
@@ -280,6 +289,25 @@ def main():
                 model, tokenizer, buffer.rows(), max_tokens=protocol["max_tokens"],
                 desc="initial peak token anchors",
             )
+    ewc_states = []
+    if args.method in mfr_dpo.EWC_METHODS and len(buffer):
+        state_path = Path(previous_adapter) / "ewc_states.pt" if previous_adapter else None
+        if state_path is not None and state_path.exists():
+            ewc_states = mfr_dpo.load_ewc_states(state_path, model)
+            print(f"Loaded LoRA-EWC state for {len(ewc_states)} earlier behavior(s).", flush=True)
+        else:
+            if first_stage > 2:
+                raise FileNotFoundError(
+                    f"cannot resume EWC at stage {first_stage}; missing {state_path}"
+                )
+            fisher_rows = buffer.rows().head(protocol["ewc_fisher_pairs"])
+            print("Estimating the Stage-1 LoRA Fisher from the frozen buffer sample...", flush=True)
+            ewc_states = [mfr_dpo.estimate_lora_fisher(
+                model, tokenizer, fisher_rows, beta=protocol["beta"],
+                batch_size=protocol["ewc_fisher_batch_size"],
+                max_tokens=protocol["max_tokens"], reference_cache=reference_cache,
+                desc="stage 1: LoRA Fisher",
+            )]
     run_meta = {"run_name": run_name, "order_id": args.order, "method": args.method, "seed": args.seed,
                 "protocol_version": protocol["protocol_version"], "data_version": protocol["data_version"]}
     if first_stage == 1:
@@ -304,6 +332,7 @@ def main():
             anchors=anchors, anchor_strength=anchor_strength,
             huber_delta=protocol["dapr_huber_delta"],
             mir_lookahead_steps=protocol["mir_lookahead_steps"],
+            ewc_states=ewc_states, ewc_coefficient=ewc_coefficient,
         )
         model.save_pretrained(stage_dir)
         print(f"Stage {stage}/{n_stages} training saved; scoring validation sets...", flush=True)
@@ -313,12 +342,25 @@ def main():
             model, tokenizer, splits, stage, dataset, run_meta, run_dir, protocol, reference_cache
         )
         results = pd.concat([results, stage_results], ignore_index=True)
-        results.to_csv(run_dir / "results.csv", index=False)
         if stage < len(order):
+            if args.method in mfr_dpo.EWC_METHODS:
+                fisher_rows = buffer.candidates(dataset, splits[dataset]["train"])
+                fisher_rows = fisher_rows.head(protocol["ewc_fisher_pairs"])
+                ewc_states.append(mfr_dpo.estimate_lora_fisher(
+                    model, tokenizer, fisher_rows, beta=protocol["beta"],
+                    batch_size=protocol["ewc_fisher_batch_size"],
+                    max_tokens=protocol["max_tokens"], reference_cache=reference_cache,
+                    desc=f"stage {stage}: LoRA Fisher",
+                ))
+                mfr_dpo.save_ewc_states(ewc_states, stage_dir / "ewc_states.pt")
             buffer = update_buffer(
                 model, tokenizer, buffer, stage, dataset, splits[dataset]["train"], stage_dir,
                 protocol, reference_cache, args.method, anchors=anchors,
             )
+        # A stage becomes resumably complete only after all method-specific state and the next
+        # stage's buffer have been saved. This prevents an interrupted Fisher estimate from making
+        # the group runner skip directly to a stage whose EWC state does not exist.
+        results.to_csv(run_dir / "results.csv", index=False)
 
     expected = [run_dir / "settings.json", run_dir / "results.csv"] + [
         run_dir / f"stage{stage}_{dataset}" / "history.csv" for stage, dataset in enumerate(order, 1)
@@ -328,6 +370,10 @@ def main():
     if args.method in mfr_dpo.ANCHOR_METHODS and n_stages > 1:
         expected.append(
             run_dir / f"stage{n_stages - 1}_{order[n_stages - 2]}" / "preference_anchors.npz"
+        )
+    if args.method in mfr_dpo.EWC_METHODS and n_stages > 1:
+        expected.append(
+            run_dir / f"stage{n_stages - 1}_{order[n_stages - 2]}" / "ewc_states.pt"
         )
     mark_run_complete(run_dir, expected)
     print(results.tail(9).to_string(index=False))

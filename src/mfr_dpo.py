@@ -19,6 +19,7 @@ MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 ANCHOR_METHODS = (
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted",
 )
+EWC_METHODS = ("ewc_0_1", "ewc_1", "ewc_10")
 # Diagnostics that describe the anchors actually applied. They are averaged over anchored
 # replay pairs only, so DAPR-Gated's gated-off occurrences cannot dilute them.
 ANCHORED_RATE_KEYS = (
@@ -258,9 +259,40 @@ def _anchor_regularizer(method, policy, token_logp, seq_index, batch, anchors, h
     }
 
 
+def _trainable_lora_parameters(model):
+    """Return trainable LoRA tensors and reject an accidental wider EWC scope."""
+    named = {name: parameter for name, parameter in model.named_parameters()
+             if parameter.requires_grad}
+    if not named:
+        raise ValueError("model has no trainable parameters for LoRA-EWC")
+    unexpected = [name for name in named if "lora_" not in name.lower()]
+    if unexpected:
+        raise ValueError(f"LoRA-EWC found non-LoRA trainable parameters: {unexpected[:3]}")
+    return named
+
+
+def _ewc_regularizer(model, ewc_states):
+    """Multi-anchor diagonal EWC penalty over trainable LoRA parameters only."""
+    if not ewc_states:
+        parameter = next((value for value in model.parameters() if value.requires_grad), None)
+        return parameter.new_zeros(()) if parameter is not None else torch.tensor(0.0)
+    named = _trainable_lora_parameters(model)
+    penalty = None
+    for task_state in ewc_states:
+        if set(task_state["anchor"]) != set(named) or set(task_state["fisher"]) != set(named):
+            raise ValueError("EWC state does not match the model's trainable LoRA parameters")
+        for name, parameter in named.items():
+            anchor = task_state["anchor"][name]
+            fisher = task_state["fisher"][name]
+            term = 0.5 * (fisher * (parameter.float() - anchor).square()).sum()
+            penalty = term if penalty is None else penalty + term
+    return penalty
+
+
 def dpo_loss(model, batch, beta, reference_cache=None, method="none", anchors=None,
-             anchor_strength=0.1, huber_delta=1.0, return_diagnostics=False):
-    """Summed-log-probability DPO, optionally with a replay-only peak constraint."""
+             anchor_strength=0.1, huber_delta=1.0, ewc_states=None,
+             ewc_coefficient=0.0, return_diagnostics=False):
+    """Summed-log-probability DPO with optional replay anchoring or LoRA-EWC."""
     n = batch["n_pairs"]
     if method in ANCHOR_METHODS:
         token_logp, seq_index, lengths = response_token_logprobs(model, batch)
@@ -289,13 +321,107 @@ def dpo_loss(model, batch, beta, reference_cache=None, method="none", anchors=No
             "rejected_violation_rate": 0.0, "huber_cap_rate": 0.0,
             "anchor_common_shift": 0.0, "anchored_pairs": 0,
         }
-    loss = base_loss + float(anchor_strength) * regularizer
+    if method in EWC_METHODS:
+        ewc_regularizer = _ewc_regularizer(model, ewc_states)
+    else:
+        ewc_regularizer = base_loss.new_zeros(())
+    loss = (base_loss + float(anchor_strength) * regularizer
+            + float(ewc_coefficient) * ewc_regularizer)
     diagnostics.update({
         "dpo_loss": base_loss.detach().item(),
         "weighted_anchor_loss": float(anchor_strength) * diagnostics["anchor_loss"],
+        "ewc_loss": ewc_regularizer.detach().item(),
+        "weighted_ewc_loss": float(ewc_coefficient) * ewc_regularizer.detach().item(),
+        "ewc_tasks": len(ewc_states or []),
     })
     result = (loss, (logits > 0).float().mean().item())
     return (*result, diagnostics) if return_diagnostics else result
+
+
+def estimate_lora_fisher(model, tokenizer, df, beta=0.1, batch_size=1, max_tokens=1024,
+                         reference_cache=None, desc="estimating LoRA Fisher"):
+    """Estimate one task's diagonal empirical Fisher and capture its learned LoRA weights.
+
+    The approximation averages squared per-pair gradients of the ordinary DPO loss in a
+    deterministic, length-sorted pass. Evaluation mode disables LoRA dropout, and only trainable adapter
+    parameters are stored. The returned tensors stay on the model device for efficient training.
+    """
+    rows = df.to_dict("records")
+    if not rows:
+        raise ValueError("cannot estimate EWC Fisher from an empty dataframe")
+    named = list(_trainable_lora_parameters(model).items())
+    order = sorted(
+        range(len(rows)), key=lambda index: pair_length(rows[index])
+        if "prompt_tokens" in rows[index] else 0
+    )
+    fisher = {name: torch.zeros_like(parameter, dtype=torch.float32)
+              for name, parameter in named}
+    was_training = model.training
+    model.eval()
+    try:
+        for start in tqdm(
+            range(0, len(order), batch_size), desc=desc, unit="batch", leave=True,
+            dynamic_ncols=True,
+        ):
+            indices = order[start:start + batch_size]
+            batch = make_batch(tokenizer, [rows[index] for index in indices], max_tokens)
+            model.zero_grad(set_to_none=True)
+            loss, _ = dpo_loss(
+                model, batch, beta, reference_cache=reference_cache, method="none"
+            )
+            loss.backward()
+            weight = len(indices) / len(rows)
+            for name, parameter in named:
+                if parameter.grad is not None:
+                    fisher[name].add_(parameter.grad.detach().float().square(), alpha=weight)
+    finally:
+        model.zero_grad(set_to_none=True)
+        model.train(was_training)
+    return {
+        "anchor": {name: parameter.detach().float().clone() for name, parameter in named},
+        "fisher": fisher,
+        "pairs": len(rows),
+        "batch_size": int(batch_size),
+    }
+
+
+def save_ewc_states(states, path):
+    """Persist auditable LoRA-EWC anchors and diagonal Fishers for stage resume."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cpu_states = []
+    for state in states:
+        cpu_states.append({
+            "anchor": {name: value.detach().cpu() for name, value in state["anchor"].items()},
+            "fisher": {name: value.detach().cpu() for name, value in state["fisher"].items()},
+            "pairs": int(state["pairs"]),
+            "batch_size": int(state["batch_size"]),
+        })
+    torch.save({"format_version": 1, "states": cpu_states}, path)
+
+
+def load_ewc_states(path, model):
+    """Load and validate a saved LoRA-EWC state on the adapter's current device."""
+    try:
+        saved = torch.load(path, map_location="cpu", weights_only=True)
+    except TypeError:  # Compatibility with older PyTorch versions.
+        saved = torch.load(path, map_location="cpu")
+    if saved.get("format_version") != 1:
+        raise ValueError(f"unsupported EWC state format in {path}")
+    named = _trainable_lora_parameters(model)
+    loaded = []
+    for state in saved.get("states", []):
+        if set(state["anchor"]) != set(named) or set(state["fisher"]) != set(named):
+            raise ValueError("saved EWC state does not match the model's trainable LoRA parameters")
+        loaded.append({
+            "anchor": {name: value.to(named[name].device, dtype=torch.float32)
+                       for name, value in state["anchor"].items()},
+            "fisher": {name: value.to(named[name].device, dtype=torch.float32)
+                       for name, value in state["fisher"].items()},
+            "pairs": int(state["pairs"]),
+            "batch_size": int(state["batch_size"]),
+        })
+    return loaded
 
 
 @torch.no_grad()
@@ -479,7 +605,8 @@ def summarize(scores):
 
 def _train_microbatches(model, tokenizer, pairs, optimizer, params, beta, micro_batch, max_tokens,
                         reference_cache=None, method="none", anchors=None,
-                        anchor_strength=0.1, huber_delta=1.0):
+                        anchor_strength=0.1, huber_delta=1.0, ewc_states=None,
+                        ewc_coefficient=0.0):
     optimizer.zero_grad()
     step_loss, step_acc = 0.0, 0.0
     step_diagnostics = {
@@ -488,6 +615,8 @@ def _train_microbatches(model, tokenizer, pairs, optimizer, params, beta, micro_
         "huber_cap_rate": 0.0, "anchor_common_shift": 0.0, "anchored_pairs": 0.0,
         "anchor_gate_active_pairs": 0, "anchor_gate_total_pairs": 0,
         "anchor_gate_rate": np.nan,
+        "ewc_loss": 0.0, "weighted_ewc_loss": 0.0,
+        "ewc_tasks": len(ewc_states or []),
     }
     total_replay = sum(bool(pair.get("_is_replay", False)) for pair in pairs)
     anchored_sums = dict.fromkeys(ANCHORED_RATE_KEYS, 0.0)
@@ -516,6 +645,7 @@ def _train_microbatches(model, tokenizer, pairs, optimizer, params, beta, micro_
         result = dpo_loss(
             model, batch, beta, reference_cache=reference_cache, method=method,
             anchors=anchors, anchor_strength=effective_anchor_strength, huber_delta=huber_delta,
+            ewc_states=ewc_states, ewc_coefficient=ewc_coefficient,
             return_diagnostics=True,
         )
         if len(result) == 2:  # CPU bookkeeping tests replace dpo_loss with a two-value stand-in.
@@ -530,6 +660,10 @@ def _train_microbatches(model, tokenizer, pairs, optimizer, params, beta, micro_
         step_diagnostics["anchor_loss"] += float(diagnostics.get("anchor_loss", 0.0)) * replay_weight
         step_diagnostics["weighted_anchor_loss"] = (
             float(anchor_strength) * step_diagnostics["anchor_loss"]
+        )
+        step_diagnostics["ewc_loss"] += float(diagnostics.get("ewc_loss", 0.0)) * weight
+        step_diagnostics["weighted_ewc_loss"] = (
+            float(ewc_coefficient) * step_diagnostics["ewc_loss"]
         )
         chunk_anchored = float(diagnostics.get("anchored_pairs", 0.0))
         if chunk_anchored > 0:
@@ -646,7 +780,7 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
                        desc="training", progress_path=None, save_every=25, reference_cache=None,
                        fmcr_velocity_decay=0.5, fmcr_forecast_horizon=1.0,
                        anchors=None, anchor_strength=0.1, huber_delta=1.0,
-                       mir_lookahead_steps=1):
+                       mir_lookahead_steps=1, ewc_states=None, ewc_coefficient=0.0):
     """Train once over new data with auditable replay; default batches are exactly 90/10 new/old."""
     import mfr_replay
     from mfr_utils import seed_everything
@@ -656,7 +790,8 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
     rows = df.sample(frac=1, random_state=seed).to_dict("records")
     n_steps = math.ceil(len(rows) / new_per_step)
     interval_len = max(1, math.ceil(n_steps / max(1, refreshes)))
-    replaying = method != "none" and buffer is not None and len(buffer) and old_per_step > 0
+    replaying = (mfr_replay.uses_replay(method) and buffer is not None
+                 and len(buffer) and old_per_step > 0)
     params = [parameter for parameter in model.parameters() if parameter.requires_grad]
     optimizer = torch.optim.AdamW(params, lr=lr)
     scheduler = get_linear_schedule_with_warmup(optimizer, max(1, n_steps // 20), n_steps)
@@ -810,6 +945,7 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
             model, tokenizer, pairs, optimizer, params, beta, micro_batch, max_tokens,
             reference_cache, method=method, anchors=anchors,
             anchor_strength=anchor_strength, huber_delta=huber_delta,
+            ewc_states=ewc_states, ewc_coefficient=ewc_coefficient,
         )
         scheduler.step()
         previous_examples = history[-1]["examples_seen"] if history else 0
