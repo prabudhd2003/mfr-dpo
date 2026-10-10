@@ -60,3 +60,23 @@ def test_manifest_detects_modified_jsonl(tmp_path):
         raise AssertionError("expected manifest mismatch")
     except ValueError as error:
         assert "SHA-256 mismatch" in str(error)
+
+
+def test_joint_training_frame_uses_every_training_pair_once():
+    splits = {
+        dataset: {
+            "train": pd.DataFrame({
+                "id": [f"{dataset}-train-{index}" for index in range(3)],
+                "prompt": [f"{dataset} prompt {index}" for index in range(3)],
+                "chosen": ["yes"] * 3,
+                "rejected": ["no"] * 3,
+            })
+        }
+        for dataset in ("helpful", "safe", "quality")
+    }
+    joint = mfr_data.joint_training_frame(splits)
+    assert len(joint) == 9
+    assert joint["id"].nunique() == 9
+    assert joint["training_behavior"].value_counts().to_dict() == {
+        "helpful": 3, "safe": 3, "quality": 3,
+    }

@@ -285,3 +285,26 @@ def load_splits(folder, validate=True, verify_hashes=True):
     if validate:
         validate_splits(splits)
     return splits
+
+
+def joint_training_frame(splits, datasets=("helpful", "safe", "quality")):
+    """Combine complete training splits for the offline joint-access reference.
+
+    The returned rows are deliberately not shuffled here.  The training function performs one
+    global, seed-controlled shuffle, which keeps data construction independent of the run seed.
+    A behavior label is retained so the saved history can be audited later if needed.
+    """
+    frames = []
+    for dataset in datasets:
+        if dataset not in splits or "train" not in splits[dataset]:
+            raise KeyError(f"joint training is missing {dataset}/train")
+        frame = splits[dataset]["train"].copy()
+        frame["training_behavior"] = dataset
+        frames.append(frame)
+    combined = pd.concat(frames, ignore_index=True)
+    if combined.empty:
+        raise ValueError("joint training data is empty")
+    if combined["id"].duplicated().any():
+        duplicates = combined.loc[combined["id"].duplicated(), "id"].astype(str).tolist()
+        raise ValueError(f"joint training contains duplicate pair IDs: {duplicates[:3]}")
+    return combined

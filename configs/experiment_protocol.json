@@ -27,6 +27,7 @@
     "ewc_10"
   ],
   "seeds": [0, 1],
+  "joint_seeds": [0, 1, 2, 3, 4],
   "train_pairs": 2000,
   "val_pairs": 200,
   "test_pairs": 300,

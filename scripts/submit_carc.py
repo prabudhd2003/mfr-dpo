@@ -51,6 +51,12 @@ def parse_args():
         "--methods",
         help="Comma-separated override; default is every method configured in the protocol",
     )
+
+    joint = subparsers.add_parser(
+        "joint", help="Run one seed of the order-independent joint-training reference"
+    )
+    add_common(joint, "02:00:00")
+    joint.add_argument("--seed", type=int, required=True)
     return parser.parse_args()
 
 
@@ -72,6 +78,13 @@ def validate_group(args, settings):
     return methods
 
 
+def validate_joint(args, settings):
+    seeds = settings.get("joint_seeds", [])
+    if args.seed not in seeds:
+        raise ValueError(f"unknown joint seed {args.seed}; configured joint seeds: {seeds}")
+    return args.seed
+
+
 def main():
     args = parse_args()
     settings = protocol()
@@ -91,6 +104,12 @@ def main():
         worker_args = [
             "group", str(ROOT), str(output_dir), args.conda_env, gpu_type,
             str(args.order), str(args.seed), method_text,
+        ]
+    elif args.action == "joint":
+        validate_joint(args, settings)
+        job_name = f"mfr-joint-s{args.seed}"
+        worker_args = [
+            "joint", str(ROOT), str(output_dir), args.conda_env, gpu_type, str(args.seed),
         ]
     else:
         job_name = "mfr-cache"

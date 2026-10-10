@@ -61,6 +61,13 @@ case "$ACTION" in
       --methods "$METHODS" \
       --reference-cache "$CACHE_PATH"
     ;;
+  joint)
+    SEED="$1"
+    "$PYTHON_BIN" -u scripts/run_joint_training.py \
+      --output-dir "$OUTPUT_DIR" \
+      --seed "$SEED" \
+      --reference-cache "$CACHE_PATH"
+    ;;
   *)
     echo "Unknown CARC action: $ACTION" >&2
     exit 2

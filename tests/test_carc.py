@@ -2,6 +2,7 @@
 
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 
@@ -12,6 +13,11 @@ SPEC = importlib.util.spec_from_file_location(
 )
 GROUP = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(GROUP)
+SUBMIT_SPEC = importlib.util.spec_from_file_location(
+    "submit_carc", ROOT / "scripts" / "submit_carc.py"
+)
+SUBMIT = importlib.util.module_from_spec(SUBMIT_SPEC)
+SUBMIT_SPEC.loader.exec_module(SUBMIT)
 
 
 def test_default_group_contains_all_configured_methods():
@@ -40,3 +46,18 @@ def test_group_skips_complete_run(tmp_path):
     run.mkdir()
     (run / "COMPLETE.json").write_text("{}", encoding="utf-8")
     assert GROUP.first_unfinished_stage(run, initial_stage=1, n_stages=3) is None
+
+
+def test_joint_submission_accepts_all_five_frozen_seeds():
+    protocol = SUBMIT.protocol()
+    for seed in range(5):
+        assert SUBMIT.validate_joint(SimpleNamespace(seed=seed), protocol) == seed
+
+
+def test_joint_submission_rejects_an_unconfigured_seed():
+    protocol = SUBMIT.protocol()
+    try:
+        SUBMIT.validate_joint(SimpleNamespace(seed=5), protocol)
+        raise AssertionError("expected an unknown joint seed error")
+    except ValueError as error:
+        assert "configured joint seeds" in str(error)

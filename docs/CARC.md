@@ -288,6 +288,57 @@ Then rerun notebook 07 from the top. Choose one coefficient using the frozen dev
 final-task score to stay within 2 points of Random 10%, then prefer the highest final three-behavior average, with
 retention and consistency across cells reported alongside it. Freeze that coefficient before unseen-seed runs.
 
+### Run the offline joint-training reference
+
+Joint training is deliberately separate from the sequential methods. Each run globally shuffles all 6,000 frozen
+training pairs (2,000 Helpful, 2,000 Safe, and 2,000 Quality), trains a fresh adapter for one pass, and evaluates all
+three validation sets. It has no task order and receives no forgetting score. Outputs go under
+`$MFR_OUTPUT_DIR/joint_runs/`, so notebook 07 cannot accidentally treat them as continual runs.
+
+Wait for any already-submitted experiments to finish before pulling this implementation into the shared CARC
+checkout. Then run the tests and submit Seeds 0–4:
+
+```bash
+cd /project2/xiangren_1987/grp26-mfr-dpo
+
+module purge
+module load conda
+eval "$(conda shell.bash hook)"
+conda activate /project2/xiangren_1987/grp26-mfr-dpo/.conda/envs/mfr-dpo
+
+export MFR_OUTPUT_DIR=/project2/xiangren_1987/grp26-mfr-dpo/artifacts
+
+git status --short
+python -m pytest -q
+
+for seed in 0 1 2 3 4; do
+  python scripts/submit_carc.py joint \
+    --output-dir "$MFR_OUTPUT_DIR" \
+    --account xiangren_1987 \
+    --gpu l40s \
+    --time 02:00:00 \
+    --seed "$seed"
+done
+```
+
+This submits five independent L40S jobs. Check them with:
+
+```bash
+squeue --me --format="%.18i %.20j %.2t %.10M %.30R"
+
+for seed in 0 1 2 3 4; do
+  marker="$MFR_OUTPUT_DIR/joint_runs/v2_joint_s${seed}/COMPLETE.json"
+  if [[ -f "$marker" ]]; then
+    echo "Joint seed $seed COMPLETE"
+  else
+    echo "Joint seed $seed MISSING"
+  fi
+done
+```
+
+After all five finish, run notebook 08. Compare final Helpful, Safe, Quality, and three-behavior average scores, but
+do not report retention for joint training because no behavior is learned in a separate earlier stage.
+
 After Balanced MFR is implemented and configured as `mfr_balanced`, run only that new method across all eight cells:
 
 ```bash

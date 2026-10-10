@@ -35,6 +35,7 @@ def test_protocol_uses_exact_ten_percent_replay():
     assert method_ewc_coefficient(protocol, "ewc_10") == 10.0
     assert protocol["ewc_fisher_pairs"] == 500
     assert protocol["ewc_fisher_batch_size"] == 1
+    assert protocol["joint_seeds"] == [0, 1, 2, 3, 4]
     assert protocol["lora_alpha"] == 32 and protocol["epochs"] == 1
 
 

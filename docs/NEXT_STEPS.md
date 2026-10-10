@@ -78,6 +78,17 @@ protection can explain DAPR's gain.
 
 Next, implement, test, and run both methods for all four orders and both seeds.
 
+## 4a. Run the implemented joint-training reference
+
+The offline joint-access baseline is implemented separately from continual runs. It trains on all 6,000 frozen
+training pairs in one global seed-controlled shuffle using the same model, QLoRA, DPO, optimizer, and one-epoch
+settings. Run Seeds 0–4 using `python scripts/submit_carc.py joint ...` as documented in `docs/CARC.md`.
+
+Joint training answers what happens when all three datasets remain available simultaneously. It has no task order,
+replay buffer, or conventional forgetting measurement. Report its final per-behavior and three-behavior-average
+validation scores as an offline reference, then evaluate the frozen joint checkpoints on the locked test only after
+the same final-evaluation decision used for continual methods.
+
 ## 5. Verify the run grid
 
 There should be eight completed runs for each new method:
@@ -287,6 +298,8 @@ and hold up on unseen seeds, generation evaluation, and the locked test before i
 - [x] LoRA-EWC coefficients implemented and tested
 - [ ] LoRA-EWC coefficients 0.1, 1, and 10 run in all eight cells
 - [ ] One LoRA-EWC coefficient selected and frozen
+- [x] Offline joint-training reference implemented and tested
+- [ ] Joint-training Seeds 0–4 run and analyzed
 - [ ] Balanced MFR and At-Risk MFR added to the full analysis
 - [ ] Final method and statistical plan frozen
 - [ ] Unseen-seed confirmation complete

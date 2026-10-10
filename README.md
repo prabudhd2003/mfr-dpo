@@ -80,6 +80,12 @@ These three coefficient settings have not been evaluated yet. They will be compa
 coefficient will then be frozen before unseen-seed confirmation. Balanced MFR and At-Risk MFR remain separate
 planned ablations and are intentionally left to their existing specifications.
 
+An order-independent **joint-training reference** is also implemented. It combines all 6,000 frozen training pairs
+(2,000 per behavior), performs one global seed-controlled shuffle, and trains one fresh adapter for one pass with
+the same QLoRA and DPO settings. It is configured for Seeds 0–4 and writes to `artifacts/joint_runs/`, separately
+from continual runs so it is never assigned a forgetting score. This reference asks how well the three behaviors
+can be learned when all training data remain simultaneously available; it is not a continual-learning method.
+
 ## Data
 
 | Behavior | Dataset | Train | Validation | Locked test | Example type |
@@ -320,6 +326,7 @@ The active notebooks are:
 |---|---|
 | `01_carc_status.ipynb` | Check the frozen data, reference cache, and completed CARC runs. |
 | `07_compare_runs.ipynb` | Produce the complete validation tables, figures, uncertainty, and conclusions. |
+| `08_joint_baseline.ipynb` | Analyze the separate all-data-at-once joint-training reference. |
 
 Training runs as unattended Slurm jobs on USC CARC using one NVIDIA L40S GPU. Large caches, checkpoints, logs, and
 results are stored under the ignored CARC `artifacts/` directory rather than Git.

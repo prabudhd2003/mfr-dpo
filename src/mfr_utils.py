@@ -13,6 +13,7 @@ import tempfile
 
 SCIENTIFIC_CODE_PATHS = (
     "scripts/run_experiment.py",
+    "scripts/run_joint_training.py",
     "src/mfr_cache.py",
     "src/mfr_data.py",
     "src/mfr_dpo.py",
@@ -62,7 +63,8 @@ def load_protocol(path="configs/experiment_protocol.json"):
                 "new_per_step", "old_per_step", "buffer_size", "refreshes",
                 "fmcr_velocity_decay", "fmcr_forecast_horizon"}
     required |= {"anchor_strength", "dapr_huber_delta", "mir_lookahead_steps",
-                 "ewc_coefficients", "ewc_fisher_pairs", "ewc_fisher_batch_size"}
+                 "ewc_coefficients", "ewc_fisher_pairs", "ewc_fisher_batch_size",
+                 "joint_seeds"}
     missing = required - set(protocol)
     if missing:
         raise ValueError(f"protocol is missing {sorted(missing)}")
@@ -102,6 +104,11 @@ def load_protocol(path="configs/experiment_protocol.json"):
     if (not isinstance(protocol["ewc_fisher_batch_size"], int)
             or protocol["ewc_fisher_batch_size"] <= 0):
         raise ValueError("ewc_fisher_batch_size must be a positive integer")
+    joint_seeds = protocol["joint_seeds"]
+    if (not isinstance(joint_seeds, list) or not joint_seeds
+            or any(not isinstance(seed, int) or seed < 0 for seed in joint_seeds)
+            or len(joint_seeds) != len(set(joint_seeds))):
+        raise ValueError("joint_seeds must be a non-empty list of unique non-negative integers")
     return protocol
 
 
