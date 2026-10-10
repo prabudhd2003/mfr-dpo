@@ -8,6 +8,8 @@ Margin, -4.28 for CPMR, and -1.94 for the selected DAPR setting. The offline joi
 complete at 73.20 mean final accuracy across five seeds. Balanced MFR must be compared on the same four orders and
 two development seeds before method selection is frozen.
 
+**Implemented (2026-10-10):** `mfr_balanced` in `src/mfr_replay.py`, with tests in `tests/test_replay.py` and `tests/test_budget.py`. Run it with docs/RUNBOOK.md step 2d.
+
 ## Purpose
 
 Original MFR ranks every old pair together by:

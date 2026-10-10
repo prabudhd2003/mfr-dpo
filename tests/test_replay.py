@@ -423,3 +423,109 @@ def test_fmcr_is_seeded_and_auditable():
     assert a["id"].tolist() == b["id"].tolist()
     assert {"forecast_margin", "forecast_policy_margin", "time_to_crossing",
             "historical_drop", "risk_tier", "risk_label", "dataset_quota"} <= set(a.columns)
+
+
+# ------------------------------------------------------- Balanced and At-Risk MFR
+
+def scored_buffer(relative, policy, size=20, two_stages=True):
+    """Buffer with explicit current relative and policy margins (arrays in buffer row order)."""
+    buffer = filled_buffer(size=size, two_stages=two_stages)
+    ids = buffer.rows()["id"].values
+    buffer.set_current(pd.Series(relative, index=ids), policy_margin=pd.Series(policy, index=ids))
+    return buffer
+
+
+def test_balanced_and_at_risk_need_live_refreshes():
+    assert mfr_replay.needs_refresh("mfr_balanced")
+    assert mfr_replay.needs_refresh("mfr_at_risk")
+
+
+def test_balanced_mfr_splits_slots_equally_and_ranks_by_drop():
+    buffer = filled_buffer(size=20, two_stages=True)
+    rows = buffer.rows()
+    # Every safe pair forgets far more than every helpful pair; plain MFR would pick mostly safe.
+    drop = np.where(rows["dataset"] == "safe", 1.0, 0.0) + np.linspace(0, 0.1, len(rows))
+    buffer.set_current(pd.Series(rows["peak_margin"].to_numpy() - drop, index=rows["id"].values))
+    plan = mfr_replay.plan_interval_details(buffer, "mfr_balanced", 8, np.random.default_rng(0))
+    assert plan["dataset"].value_counts().to_dict() == {"safe": 4, "helpful": 4}
+    assert plan["dataset"].iloc[0] != plan["dataset"].iloc[1]          # interleaved
+    for dataset, part in plan.groupby("dataset"):
+        best = (rows.assign(d=drop)[rows["dataset"] == dataset]
+                .sort_values("d", ascending=False)["id"].head(4))
+        assert set(part["id"]) == set(best)
+
+
+def test_balanced_mfr_with_one_behavior_equals_mfr():
+    buffer = filled_buffer(size=30)
+    rows = buffer.rows()
+    buffer.set_current(pd.Series(rows["peak_margin"].to_numpy()
+                                 - np.random.default_rng(3).random(len(rows)), index=rows["id"].values))
+    a = plan_interval(buffer, "mfr", 12, np.random.default_rng(5))
+    b = plan_interval(buffer, "mfr_balanced", 12, np.random.default_rng(5))
+    assert a == b
+
+
+def test_balanced_mfr_rotates_an_odd_remainder():
+    buffer = filled_buffer(size=20, two_stages=True)
+    first = mfr_replay.plan_interval_details(buffer, "mfr_balanced", 5, np.random.default_rng(0), plan_index=0)
+    second = mfr_replay.plan_interval_details(buffer, "mfr_balanced", 5, np.random.default_rng(0), plan_index=1)
+    assert first["dataset"].value_counts().max() == 3 and second["dataset"].value_counts().max() == 3
+    assert first["dataset"].value_counts().idxmax() != second["dataset"].value_counts().idxmax()
+
+
+def test_at_risk_puts_policy_failures_first_then_largest_drop():
+    buffer = filled_buffer(size=20, two_stages=True)
+    rows = buffer.rows()
+    n = len(rows)
+    relative = rows["peak_margin"].to_numpy() - np.linspace(0, 1, n)    # later rows forget more
+    policy = np.full(n, 0.5)
+    safe_index = np.flatnonzero(rows["dataset"] == "safe")
+    failed = safe_index[:2]                                             # small drops, but failed
+    policy[failed] = -0.1
+    relative[safe_index[2]] = -5.0                                      # relative <= 0 but policy > 0
+    buffer = scored_buffer(relative, policy)
+    plan = mfr_replay.plan_interval_details(buffer, "mfr_at_risk", 8, np.random.default_rng(0))
+    safe_plan = plan[plan["dataset"] == "safe"]
+    assert list(safe_plan["risk_tier"].iloc[:2]) == [0, 0]
+    assert set(safe_plan["id"].iloc[:2]) == set(rows["id"].iloc[failed])
+    # failed pairs ordered by drop (the second failed row has the larger drop)
+    assert safe_plan["id"].iloc[0] == rows["id"].iloc[failed[1]]
+    # equal quotas even though every failure is safe
+    assert plan["dataset"].value_counts().to_dict() == {"safe": 4, "helpful": 4}
+    # a negative relative margin alone is tier 1
+    third = plan[plan["id"] == rows["id"].iloc[safe_index[2]]]
+    assert third.empty or int(third["risk_tier"].iloc[0]) == 1
+
+
+def test_at_risk_falls_back_to_mfr_when_nothing_failed():
+    buffer = filled_buffer(size=20, two_stages=True)
+    rows = buffer.rows()
+    relative = rows["peak_margin"].to_numpy() - np.random.default_rng(1).random(len(rows))
+    at_risk = scored_buffer(relative, np.full(len(rows), 0.3))
+    balanced = scored_buffer(relative, np.full(len(rows), 0.3))
+    a = plan_interval(at_risk, "mfr_at_risk", 10, np.random.default_rng(2))
+    b = plan_interval(balanced, "mfr_balanced", 10, np.random.default_rng(2))
+    assert a == b
+
+
+def test_at_risk_refuses_missing_policy_margins_and_is_deterministic():
+    buffer = filled_buffer(size=20, two_stages=True)
+    buffer._rows["current_policy_margin"] = np.nan
+    try:
+        plan_interval(buffer, "mfr_at_risk", 4, np.random.default_rng(0))
+        raise AssertionError("expected a ValueError")
+    except ValueError:
+        pass
+    rows = buffer.rows()
+    scored = scored_buffer(rows["current_margin"].to_numpy(), np.zeros(len(rows)))   # all tie at tier 0
+    a = plan_interval(scored, "mfr_at_risk", 6, np.random.default_rng(9))
+    b = plan_interval(scored, "mfr_at_risk", 6, np.random.default_rng(9))
+    assert a == b and len(a) == 6 and len(set(a)) == 6
+
+
+def test_at_risk_policy_margins_survive_save_and_load(tmp_path):
+    rows = filled_buffer(size=20, two_stages=True).rows()
+    buffer = scored_buffer(rows["current_margin"].to_numpy(), np.linspace(-1, 1, len(rows)))
+    buffer.to_csv(tmp_path / "buffer.csv")
+    loaded = ReplayBuffer.from_csv(tmp_path / "buffer.csv", size=20)
+    assert np.allclose(loaded.rows()["current_policy_margin"], buffer.rows()["current_policy_margin"])

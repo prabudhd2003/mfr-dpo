@@ -14,6 +14,8 @@ At-Risk MFR is the risk-aware MFR variant. Use the method name:
 mfr_at_risk
 ```
 
+**Implemented (2026-10-10):** `mfr_at_risk` in `src/mfr_replay.py`, with tests in `tests/test_replay.py` and `tests/test_budget.py`. Run it with docs/RUNBOOK.md step 2d.
+
 ## Purpose
 
 Original MFR asks: **Which pairs deteriorated most from their earlier peak?**

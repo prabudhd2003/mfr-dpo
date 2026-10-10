@@ -117,7 +117,8 @@ def test_partial_final_batch_gets_proportional_replay():
 def test_replay_slots_per_step():
     for method in (
         "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr", "dapr",
-        "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
+        "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted", "mfr_balanced",
+        "mfr_at_risk",
     ):
         history, log = run(method)
         assert (history["n_replay"] == 2).all()                    # exactly 2 old pairs every step
@@ -263,3 +264,17 @@ def test_methods_replay_different_pairs():
     assert len(set(mfr_log["id"])) >= 4
     _, random_log = run("random", buffer=buffer_with())
     assert len(set(random_log["id"])) > 5                          # random spreads over the buffer
+
+
+def test_at_risk_scores_at_step_zero_and_balanced_keeps_the_mfr_schedule():
+    dpo = load_dpo()
+    dpo.scored.clear()
+    run("mfr_balanced")
+    assert len(dpo.scored) == 4                                        # same refreshes as MFR
+    dpo.scored.clear()
+    buffer = buffer_with()
+    buffer._rows["current_policy_margin"] = np.nan                     # an old Stage-1 buffer
+    _, log = run("mfr_at_risk", buffer=buffer)
+    assert len(dpo.scored) == 5                                        # live score before the first plan
+    assert not buffer.rows()["current_policy_margin"].isna().any()
+    assert {"risk_tier", "historical_drop", "current_policy_margin", "dataset_quota"} <= set(log.columns)

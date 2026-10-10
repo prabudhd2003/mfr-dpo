@@ -98,7 +98,8 @@ def update_buffer(model, tokenizer, buffer, stage, dataset, train_df, stage_dir,
                 all_scores, velocity_decay=protocol["fmcr_velocity_decay"], initialize=False
             )
         else:
-            buffer.set_current(current_scores["margin"])
+            buffer.set_current(current_scores["margin"], policy_margin=(
+                current_scores["policy_margin"] if method == "mfr_at_risk" else None))
     buffer.to_csv(stage_dir / "buffer.csv")
     if method in mfr_dpo.ANCHOR_METHODS:
         kept = set(buffer.rows()["id"])

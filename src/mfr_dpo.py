@@ -862,7 +862,7 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
             # velocities at each task boundary so a trend from the previous task is never projected
             # into the new one. Other margin methods retain the original four-refresh schedule.
             should_score = (method not in ("cpmr", "mir_dpo") and mfr_replay.needs_refresh(method)
-                            and (step > 0 or method == "fmcr"))
+                            and (step > 0 or method in ("fmcr", "mfr_at_risk")))
             if should_score:
                 refresh_started = time.time()
                 scores = score_pairs(
@@ -897,7 +897,10 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
                         scores, velocity_decay=fmcr_velocity_decay, initialize=(step == 0)
                     )
                 else:
-                    buffer.set_current(scores["margin"])
+                    # At-Risk MFR also needs the absolute policy margin; it scores at step zero too,
+                    # so borrowed Stage-1 buffers without policy margins are filled before planning.
+                    buffer.set_current(scores["margin"], policy_margin=(
+                        scores["policy_margin"] if method == "mfr_at_risk" else None))
                 scoring_seconds += time.time() - refresh_started
             plan = mfr_replay.plan_interval_details(
                 buffer, method, interval_len * old_per_step, rng, max_share_per_dataset,

@@ -85,6 +85,22 @@ tail -40 vllm_smoke_*.out
 It must end with `SMOKE TEST PASSED`, and step 2 of its log must say `PARITY PASSED`. Send me
 the log either way.
 
+## 2d. Balanced MFR and At-Risk MFR on the 8 development cells (8 jobs, ~8 GPU-h)
+
+Development ablations (docs/BALANCED_MFR.md, docs/AT_RISK_MFR.md). They borrow Stage 1 from the
+existing `none` runs. Can run alongside 2c.
+
+```bash
+for order in 1 2 3 4; do for seed in 0 1; do
+  python scripts/submit_carc.py group --output-dir "$MFR_OUTPUT_DIR" --account $ACCT \
+    --gpu l40s --time 03:00:00 --order $order --seed $seed --methods mfr_balanced,mfr_at_risk
+done; done
+```
+
+When they finish, look at 07a (ranking, uncertainty) and the last section of 07b (slot allocation and
+failure-tier share). They qualify for the confirmation grid under the FREEZE.md rule; if so, add them
+to `METHODS_B` in step 5.
+
 ## 3. Choose the EWC coefficient, then freeze (0 GPU-h)
 
 Open `notebooks/07a_results.ipynb` (section 11) and apply the frozen rule. On your laptop, fill
