@@ -1,10 +1,12 @@
 {
-  "evaluation_version": "1.1",
+  "evaluation_version": "1.2",
   "generation": {
     "batch_size": 32,
     "do_sample": false,
     "max_new_tokens": 512,
-    "seed": 544
+    "seed": 544,
+    "engine": "vllm",
+    "max_model_len": 8192
   },
   "xstest": {
     "dataset": "Paul/XSTest",
@@ -23,7 +25,9 @@
     "model_name": "allenai/wildguard",
     "model_revision": "cbba4823f3e8020e5a74a5e29bf85072def6f2ff",
     "batch_size": 8,
-    "max_new_tokens": 48
+    "max_new_tokens": 48,
+    "engine": "vllm",
+    "max_model_len": 8192
   },
   "pairwise_judge": {
     "model_name": "prometheus-eval/prometheus-7b-v2.0",
@@ -32,7 +36,9 @@
     "max_new_tokens": 512,
     "score_both_orders": true,
     "use_reference": false,
-    "prompt_format": "prometheus-eval RELATIVE_PROMPT_WO_REF in FastChat mistral conversation"
+    "prompt_format": "prometheus-eval RELATIVE_PROMPT_WO_REF in FastChat mistral conversation",
+    "engine": "vllm",
+    "max_model_len": 16384
   },
   "judge_validation": {
     "split": "val",
@@ -46,5 +52,15 @@
     "prompts_per_behavior": 50,
     "seed": 544,
     "minimum_reviewers": 2
+  },
+  "ifeval": {
+    "engine": "vllm",
+    "max_model_len": 4096
+  },
+  "vllm": {
+    "version": "0.30.0",
+    "policy_base": "training NF4 weights dequantized to bf16 (scripts/prepare_vllm_base.py) + LoRA adapter",
+    "parity": "scripts/check_vllm_parity.py, >= 90% mean prefix agreement over 64 greedy tokens on 21 val prompts",
+    "fallback": "set every engine to hf"
   }
 }

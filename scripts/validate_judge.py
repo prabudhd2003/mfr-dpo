@@ -23,14 +23,13 @@ import pandas as pd
 import mfr_data
 from mfr_generation_eval import (
     evaluation_manifest,
-    generate_classifier_text,
     load_evaluation_protocol,
-    load_quantized_model,
     parse_prometheus_choice,
     prometheus_prompt,
     reconcile_pairwise_choices,
 )
 from mfr_utils import file_sha256, load_protocol, save_json_atomic
+from mfr_vllm import evaluator, vllm_version
 
 
 def summarize_validation(frame, threshold):
@@ -58,13 +57,15 @@ def summarize_validation(frame, threshold):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", required=True, help="Artifact root; writes judge_validation/")
+    parser.add_argument("--limit", type=int, help="Testing only: N pairs per behavior -> judge_validation_smoke/")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
     evaluation_path = ROOT / "configs" / "evaluation_protocol.json"
     evaluation = load_evaluation_protocol(evaluation_path)
     config, check = evaluation["pairwise_judge"], evaluation["judge_validation"]
-    out = Path(args.output_dir).expanduser().resolve() / "judge_validation"
+    out = Path(args.output_dir).expanduser().resolve() / (
+        "judge_validation_smoke" if args.limit else "judge_validation")
     out.mkdir(parents=True, exist_ok=True)
     if (out / "summary.csv").exists() and not args.overwrite:
         raise FileExistsError(f"{out / 'summary.csv'} exists; use --overwrite intentionally")
@@ -74,21 +75,19 @@ def main():
     use_reference = bool(config.get("use_reference", False))
     if use_reference:
         raise ValueError("judge validation requires the no-reference prompt (use_reference=false)")
-    model, tokenizer = load_quantized_model(config["model_name"], config["model_revision"])
+    judge = evaluator(config)
 
     rows = []
     for behavior in check["behaviors"]:
         pairs = splits[behavior][check["split"]].sort_values("id")
+        if args.limit:
+            pairs = pairs.head(args.limit)
         forward = [prometheus_prompt(r.prompt, r.chosen, r.rejected, behavior)
                    for r in pairs.itertuples(index=False)]
         reverse = [prometheus_prompt(r.prompt, r.rejected, r.chosen, behavior)
                    for r in pairs.itertuples(index=False)]
-        f_text = generate_classifier_text(model, tokenizer, forward, config["batch_size"],
-                                          config["max_new_tokens"], f"validate {behavior}: chosen=A",
-                                          raw_prompts=True)
-        r_text = generate_classifier_text(model, tokenizer, reverse, config["batch_size"],
-                                          config["max_new_tokens"], f"validate {behavior}: chosen=B",
-                                          raw_prompts=True)
+        texts = judge(forward + reverse, f"validate {behavior}")
+        f_text, r_text = texts[:len(pairs)], texts[len(pairs):]
         f_choice = [parse_prometheus_choice(t) for t in f_text]
         r_choice = [parse_prometheus_choice(t) for t in r_text]
         resolved = [reconcile_pairwise_choices(a, b) for a, b in zip(f_choice, r_choice)]
@@ -101,7 +100,8 @@ def main():
         path = out / f"{behavior}.csv"
         frame.to_csv(path, index=False)
         evaluation_manifest(path, [evaluation_path], evaluator_model=config["model_name"],
-                            evaluator_revision=config["model_revision"])
+                            evaluator_revision=config["model_revision"],
+                            engine=config.get("engine", "vllm"), vllm_version=vllm_version())
         rows.append({"behavior": behavior, **summarize_validation(
             frame, check["minimum_position_consistent_agreement_pct"])})
         rows_all = pd.concat([pd.read_csv(out / f"{b}.csv") for b in
@@ -112,6 +112,7 @@ def main():
     summary.to_csv(out / "summary.csv", index=False)
     save_json_atomic({"rows": rows, "judge": config["model_name"],
                       "judge_revision": config["model_revision"],
+                      "engine": config.get("engine", "vllm"), "limit": args.limit,
                       "evaluation_protocol_sha256": file_sha256(evaluation_path)},
                      out / "summary.json")
     print(summary.round(1).to_string(index=False))

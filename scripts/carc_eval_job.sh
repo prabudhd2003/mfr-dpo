@@ -20,6 +20,7 @@ if [[ ! -x "$PYTHON_BIN" ]]; then
 fi
 export HF_HOME="$OUTPUT_DIR/huggingface"
 export TOKENIZERS_PARALLELISM=false
+export VLLM_WORKER_MULTIPROC_METHOD=spawn
 export PYTHONUNBUFFERED=1
 export OPENBLAS_NUM_THREADS=1
 export OMP_NUM_THREADS=1
@@ -41,6 +42,12 @@ PY
 # Every action forwards its remaining arguments to the Python script unchanged; the submit helper
 # (scripts/submit_eval_carc.py) validates them first.
 case "$ACTION" in
+  vllm-base)
+    "$PYTHON_BIN" -u scripts/prepare_vllm_base.py --output-dir "$OUTPUT_DIR" "$@"
+    ;;
+  parity)
+    "$PYTHON_BIN" -u scripts/check_vllm_parity.py "$@"
+    ;;
   generate)
     "$PYTHON_BIN" -u scripts/generate_final_responses.py "$@" --confirm-final-evaluation
     ;;

@@ -1,0 +1,2 @@
+-r requirements-eval.txt
+vllm==0.30.0
