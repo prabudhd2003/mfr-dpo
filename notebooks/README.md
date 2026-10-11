@@ -9,7 +9,7 @@ The active workflow runs training through CARC terminal jobs, not notebooks.
 Before opening an active notebook on CARC, set the artifact directory in the terminal that starts Jupyter:
 
 ```bash
-export MFR_OUTPUT_DIR=/project2/xiangren_1987/grp26-mfr-dpo/artifacts
+export MFR_OUTPUT_DIR=/project2/xiangren_1987/group26/artifacts
 ```
 
 Training and cache construction are submitted with `scripts/submit_carc.py` as described in `docs/CARC.md`.

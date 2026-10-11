@@ -1,138 +1,97 @@
 # Running MFR-DPO on USC CARC
 
-> **Course-project branch.** This is the `project` branch, used in the CARC folder `/project2/xiangren_1987/group26`. Setup and every-session commands: [docs/PROJECT_FOLDER.md](PROJECT_FOLDER.md). The extended (more complex) version of the code is on the `complete` branch in `/project2/xiangren_1987/grp26-mfr-dpo`.
-
-> For the project folder, read `grp26-mfr-dpo` below as `group26` and use the every-session commands in PROJECT_FOLDER.md. Do not train in `group26`.
-
-This is the complete terminal workflow for the project. Training uses unattended Slurm jobs with one NVIDIA L40S
-GPU. Google Drive and Colab are not part of this workflow.
+This is the terminal workflow for the course project (branch `project`, folder `/project2/xiangren_1987/group26`).
+Training uses unattended Slurm jobs with one NVIDIA L40S GPU. For what this branch is and the folder layout, read
+[PROJECT_FOLDER.md](PROJECT_FOLDER.md). For what to run and when, read [NEXT_STEPS.md](NEXT_STEPS.md).
 
 The examples use:
 
 ```text
-Repository: /project2/xiangren_1987/grp26-mfr-dpo
+Repository:  /project2/xiangren_1987/group26
+Branch:      project
+Artifacts:   /project2/xiangren_1987/group26/artifacts
 CARC account: xiangren_1987
-Branch: carc
-Artifacts: /project2/xiangren_1987/grp26-mfr-dpo/artifacts
-GPU: NVIDIA L40S
+GPU:         NVIDIA L40S
 ```
 
 Do not include the shell prompt, such as `[user@discovery]$` or `bash-4.4$`, when copying a command.
 
 ## 1. Get the code
 
-For a first clone into an empty project directory:
+The clone already exists. To update it:
 
 ```bash
-cd /project2/xiangren_1987
-git clone --branch carc https://github.com/prabudhd2003/mfr-dpo.git grp26-mfr-dpo
-cd /project2/xiangren_1987/grp26-mfr-dpo
-```
-
-For an existing clone:
-
-```bash
-cd /project2/xiangren_1987/grp26-mfr-dpo
-git switch carc
+cd /project2/xiangren_1987/group26
+git switch project
 git status --short
-git pull --ff-only origin carc
+git pull --ff-only origin project
 ```
 
-If `git pull` says there are local notebook changes and those changes are only executed outputs that can be discarded:
+If `git pull` complains about local notebook changes that are only executed outputs, discard them and pull again:
 
 ```bash
 git restore -- notebooks/07_compare_runs.ipynb
-git pull --ff-only origin carc
+git pull --ff-only origin project
 ```
 
-Do not restore a file if it contains code changes that must be kept. Commit or copy those changes first.
+Do not restore a file that contains code changes you need. Commit or copy those changes first.
 
-## 2. Create the environment once
+## 2. Environments
 
-Environment creation and tests need a CPU allocation, not a GPU:
+The training environment already exists at `group26/.conda/envs/mfr-dpo`, a symlink to a shared environment. Do not
+recreate it, and do not install packages into it.
+
+The generation environment `group26/.conda/envs/mfr-gen` is created once in [NEXT_STEPS.md](NEXT_STEPS.md),
+Step 10.2. It is used only for vLLM generation, IFEval, and the judges.
+
+Register the training environment as a Jupyter kernel once:
 
 ```bash
-cd /project2/xiangren_1987/grp26-mfr-dpo
-salloc --partition=main --ntasks=1 --cpus-per-task=4 --mem=16G --time=02:00:00
+python -m ipykernel install --user --name mfr-dpo --display-name "Python (mfr-dpo)"
 ```
-
-After the allocation starts, run:
-
-```bash
-module purge
-module load conda
-
-export MFR_CONDA_ROOT=/project2/xiangren_1987/grp26-mfr-dpo/.conda
-export CONDA_PKGS_DIRS="$MFR_CONDA_ROOT/pkgs"
-mkdir -p "$MFR_CONDA_ROOT/envs" "$CONDA_PKGS_DIRS"
-
-mamba create --prefix "$MFR_CONDA_ROOT/envs/mfr-dpo" python=3.11 pip -y
-eval "$(conda shell.bash hook)"
-conda activate "$MFR_CONDA_ROOT/envs/mfr-dpo"
-
-mamba install --prefix "$MFR_CONDA_ROOT/envs/mfr-dpo" \
-  pytorch pytorch-cuda=11.8 "mkl<2024.1" "intel-openmp<2024.1" \
-  -c pytorch -c nvidia -c defaults -y
-
-python -m pip install -r requirements.txt
-python -m pip install ipykernel
-python -m pytest -q
-exit
-```
-
-The MKL and Intel OpenMP limits prevent the `iJIT_NotifyEvent` PyTorch import error seen with the 2025 packages.
 
 ## 3. Start each CARC terminal session
 
-Run this setup whenever opening a new CARC terminal:
-
 ```bash
-cd /project2/xiangren_1987/grp26-mfr-dpo
+cd /project2/xiangren_1987/group26
 module purge
 module load conda
 eval "$(conda shell.bash hook)"
-conda activate /project2/xiangren_1987/grp26-mfr-dpo/.conda/envs/mfr-dpo
-
-export MFR_OUTPUT_DIR=/project2/xiangren_1987/grp26-mfr-dpo/artifacts
-mkdir -p "$MFR_OUTPUT_DIR"
+conda activate /project2/xiangren_1987/group26/.conda/envs/mfr-dpo
+export MFR_OUTPUT_DIR=/project2/xiangren_1987/group26/artifacts
+export HF_HOME=$MFR_OUTPUT_DIR/huggingface
 ```
 
-`MFR_OUTPUT_DIR` is only a terminal variable containing the artifact path. It does not create a second copy of the
-results. Jobs receive the expanded absolute path and continue after the terminal or laptop closes.
+`MFR_OUTPUT_DIR` is only a terminal variable holding the artifact path. Jobs receive the expanded absolute path and
+keep running after the terminal or laptop closes.
 
-Optional checks:
+Checks:
 
 ```bash
-which python
+which python                       # inside group26/.conda/envs/mfr-dpo
 python -c "import torch; print(torch.__version__, torch.version.cuda)"
 python -m pytest -q
 ```
 
-## 4. Build or verify the reference cache
+## 4. Reference cache and model weights
 
-The reference cache is shared by every method. Check whether it already exists:
-
-```bash
-ls -lh \
-  "$MFR_OUTPUT_DIR/cache/reference_v2.csv" \
-  "$MFR_OUTPUT_DIR/cache/reference_v2.manifest.json"
-```
-
-If both files exist and match the active protocol, do not rebuild them. Otherwise submit one cache job:
+The reference cache is shared by every method and already exists:
 
 ```bash
-python scripts/submit_carc.py cache \
-  --output-dir "$MFR_OUTPUT_DIR" \
-  --account xiangren_1987 \
-  --gpu l40s \
-  --time 02:00:00
+ls -lh "$MFR_OUTPUT_DIR/cache/reference_v2.csv" "$MFR_OUTPUT_DIR/cache/reference_v2.manifest.json"
 ```
 
-The cache job returns immediately and runs in the background. Never submit several cache jobs at the same time.
+Do not rebuild it. Jobs read model weights from `$MFR_OUTPUT_DIR/huggingface`. Download the pinned model there once
+from a login node (NEXT_STEPS Step 0):
 
-## 5. Submit experiment jobs
+```bash
+python -c "from huggingface_hub import snapshot_download; snapshot_download('Qwen/Qwen2.5-1.5B-Instruct', revision='989aa7980e4cf806f80c7fef2b1adb7bc71aa306')"
+```
 
-One group job runs the requested methods sequentially for one order and seed. The existing orders are:
+## 5. Submit jobs
+
+Always check a new command with `--dry-run` first. Every submission returns immediately; the job runs in the
+background.
 
 | Order | Sequence |
 |---:|---|
@@ -141,145 +100,84 @@ One group job runs the requested methods sequentially for one order and seed. Th
 | 3 | Quality → Helpful → Safe |
 | 4 | Quality → Safe → Helpful |
 
-The original five-method grid has already been completed. Its default group command is:
-
-```bash
-python scripts/submit_carc.py group \
-  --output-dir "$MFR_OUTPUT_DIR" \
-  --account xiangren_1987 \
-  --gpu l40s \
-  --time 04:00:00 \
-  --order 1 \
-  --seed 0
-```
-
-After Balanced MFR is implemented and configured as `mfr_balanced`, run only that new method across all eight cells:
+**New methods on seeds 0–1 (NEXT_STEPS Step 3).** The completed `none` run of each cell supplies Stage 1. Do not
+rerun the original five methods.
 
 ```bash
 for order in 1 2 3 4; do
   for seed in 0 1; do
     python scripts/submit_carc.py group \
-      --output-dir "$MFR_OUTPUT_DIR" \
-      --account xiangren_1987 \
-      --gpu l40s \
-      --time 04:00:00 \
-      --order "$order" \
-      --seed "$seed" \
-      --methods mfr_balanced
+      --output-dir "$MFR_OUTPUT_DIR" --account xiangren_1987 --gpu l40s --time 03:00:00 \
+      --order "$order" --seed "$seed" --methods mfr_balanced,mfr_at_risk,mfr_stochastic
   done
 done
 ```
 
-After At-Risk MFR is implemented and configured as `mfr_at_risk`, run only that method:
+**Joint-training reference** ([JOINT_TRAINING.md](JOINT_TRAINING.md)):
+
+```bash
+for seed in 0 1; do
+  python scripts/submit_carc.py joint \
+    --output-dir "$MFR_OUTPUT_DIR" --account xiangren_1987 --gpu l40s --time 02:00:00 --seed "$seed"
+done
+```
+
+**Seed-2 confirmation (NEXT_STEPS Step 8, only after Step 7):**
 
 ```bash
 for order in 1 2 3 4; do
-  for seed in 0 1; do
-    python scripts/submit_carc.py group \
-      --output-dir "$MFR_OUTPUT_DIR" \
-      --account xiangren_1987 \
-      --gpu l40s \
-      --time 04:00:00 \
-      --order "$order" \
-      --seed "$seed" \
-      --methods mfr_at_risk
-  done
+  python scripts/submit_carc.py group \
+    --output-dir "$MFR_OUTPUT_DIR" --account xiangren_1987 --gpu l40s --time 06:00:00 \
+    --order "$order" --seed 2 \
+    --methods none,random,random_high,lowest_margin,mfr,mfr_balanced,mfr_at_risk,mfr_stochastic
 done
+python scripts/submit_carc.py joint \
+  --output-dir "$MFR_OUTPUT_DIR" --account xiangren_1987 --gpu l40s --time 02:00:00 --seed 2
 ```
 
-The existing completed `none` run supplies the matching Stage-1 checkpoint. Do not rerun the original five methods
-just because a new replay method is added. The Stage-1 compatibility change described in the two method documents
-must be implemented and tested first.
-
-To submit both new methods together for a single cell:
+**Locked test (NEXT_STEPS Step 9, once):**
 
 ```bash
-python scripts/submit_carc.py group \
-  --output-dir "$MFR_OUTPUT_DIR" \
-  --account xiangren_1987 \
-  --gpu l40s \
-  --time 04:00:00 \
-  --order 1 \
-  --seed 0 \
-  --methods mfr_balanced,mfr_at_risk
+python scripts/submit_carc.py test \
+  --output-dir "$MFR_OUTPUT_DIR" --account xiangren_1987 --gpu l40s --time 12:00:00
 ```
+
+**Generation evaluation (NEXT_STEPS Step 10)** uses the `generate`, `ifeval`, and `judge` actions with
+`--conda-env /project2/xiangren_1987/group26/.conda/envs/mfr-gen`.
 
 Do not submit the same order–seed–method combination twice at the same time.
 
 ## 6. Monitor, inspect, cancel, and resume
 
-List queued and running jobs:
-
 ```bash
-squeue --me --format="%.18i %.20j %.2t %.10M %.30R"
-```
-
-List the newest logs:
-
-```bash
-ls -lt "$MFR_OUTPUT_DIR/logs" | head
-```
-
-Follow one log, using the exact job name and ID printed by `squeue`:
-
-```bash
-tail -f "$MFR_OUTPUT_DIR/logs/mfr-o1-s0_JOBID.out"
-```
-
-Press `Ctrl+C` to stop following the log; this does not stop the job.
-
-When a job disappears from `squeue`, check its final state:
-
-```bash
+squeue --me --format="%.18i %.20j %.2t %.10M %.30R"     # queued and running jobs
+ls -lt "$MFR_OUTPUT_DIR/logs" | head                     # newest logs
+tail -f "$MFR_OUTPUT_DIR/logs/mfr-o1-s0_JOBID.out"       # follow one log; Ctrl+C stops following, not the job
 sacct -j JOBID --format=JobID,JobName,State,Elapsed,ExitCode
+scancel JOBID                                            # cancel a wrong or duplicate job
 ```
 
-Show its full log:
-
-```bash
-cat "$MFR_OUTPUT_DIR/logs/mfr-o1-s0_JOBID.out"
-```
-
-Cancel an incorrect or duplicate job:
-
-```bash
-scancel JOBID
-```
-
-If a job fails or reaches its time limit, make sure it is no longer running and then submit the same command again.
+If a group job fails or reaches its time limit, make sure it is no longer running, then submit the same command again.
 The group runner skips runs with `COMPLETE.json` and resumes a partial run after its last fully saved stage. If final
-results exist without `COMPLETE.json`, it stops and asks for inspection rather than guessing.
+results exist without `COMPLETE.json`, it stops and asks for inspection rather than guessing. A failed joint run is
+renamed and restarted, as described in JOINT_TRAINING.md.
 
-Useful result checks:
+Result checks:
 
 ```bash
-find "$MFR_OUTPUT_DIR/runs" -name COMPLETE.json | sort
-find "$MFR_OUTPUT_DIR/runs" -maxdepth 1 -type d | sort
+find "$MFR_OUTPUT_DIR/runs" -name COMPLETE.json | wc -l
+find "$MFR_OUTPUT_DIR/joint_runs" -name COMPLETE.json | wc -l
 du -sh "$MFR_OUTPUT_DIR"
 ```
 
 ## 7. Run the notebooks on CARC
 
-Register the kernel once:
+Start Jupyter or code-server from a terminal where `MFR_OUTPUT_DIR` is set as in section 3. Select the
+`Python (mfr-dpo)` kernel.
 
-```bash
-module purge
-module load conda
-eval "$(conda shell.bash hook)"
-conda activate /project2/xiangren_1987/grp26-mfr-dpo/.conda/envs/mfr-dpo
-python -m ipykernel install --user --name mfr-dpo --display-name "Python (mfr-dpo)"
-```
-
-Before opening Jupyter or code-server from a terminal, set:
-
-```bash
-export MFR_OUTPUT_DIR=/project2/xiangren_1987/grp26-mfr-dpo/artifacts
-```
-
-Use `notebooks/01_carc_status.ipynb` to check completion and `notebooks/07_compare_runs.ipynb` to analyze all methods,
-orders, and seeds. Select the `Python (mfr-dpo)` kernel and run Notebook 07 from the top after the new methods finish.
-
-Do not run the locked-test script while replay methods are still being designed or selected.
+- `notebooks/01_carc_status.ipynb` checks completion.
+- `notebooks/07_compare_runs.ipynb` analyzes all methods, orders, and seeds. It reads
+  `/project2/xiangren_1987/group26/artifacts`. Run it from the top.
 
 ## 8. Requirements for CARC-compatible experiment code
 
@@ -288,21 +186,19 @@ Any new training method must follow these rules:
 - Read scientific settings from `configs/experiment_protocol.json`; do not hide settings in a notebook or shell file.
 - Provide a command-line method name that `scripts/run_experiment.py`, `scripts/run_experiment_group.py`, and
   `scripts/submit_carc.py` can validate.
-- Write every large artifact beneath the passed `--output-dir`; never write to Google Drive or a local laptop path.
+- Write every large artifact beneath the passed `--output-dir`.
 - Use the existing reference cache and frozen `data/v2` files.
 - Keep runs unattended, unbuffered, resumable, and visible through progress logs.
 - Record the Git commit, code fingerprint, GPU, package versions, settings, timings, selections, and completion marker.
 - Refuse dirty Git checkouts and incompatible resumes.
 - Preserve the exact replay budget unless the method is explicitly a budget ablation.
 - Add CPU tests before submitting GPU jobs.
-- Use only the L40S request shown above for this experiment grid so hardware is consistent.
+- Use only the L40S request shown above, so hardware is consistent.
 
 Before any scientific submission:
 
 ```bash
-git status --short
+git status --short      # must be empty
 python -m pytest -q
 git rev-parse --short HEAD
 ```
-
-`git status --short` must be empty because the experiment runner refuses an uncommitted scientific checkout.
