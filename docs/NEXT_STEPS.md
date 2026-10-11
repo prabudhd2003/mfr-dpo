@@ -362,8 +362,8 @@ test before it is presented as a reliable win.
 - [x] Original seven-method validation and CPMR mechanism analysis complete
 - [x] DAPR variants, MIR-DPO, and COPR-adapted run and analyzed in all eight cells
 - [x] Higher-scale LoRA-EWC coefficients 100, 1,000, and 10,000 implemented and tested
-- [ ] LoRA-EWC coefficients 100, 1,000, and 10,000 run in all eight cells
-- [ ] Representative LoRA-EWC coefficient selected with the frozen rule
+- [x] LoRA-EWC coefficients 100, 1,000, and 10,000 run in all eight cells
+- [x] LoRA-EWC dropped from the confirmation grid: no coefficient beats no replay (docs/EWC_DECISION.md)
 - [x] Offline joint-training reference implemented and tested
 - [x] Joint-training Seeds 0–4 run and analyzed
 - [ ] Balanced MFR and At-Risk MFR added to the full analysis

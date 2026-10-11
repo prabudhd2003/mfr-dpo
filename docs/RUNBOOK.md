@@ -4,7 +4,7 @@ Run the steps in order. **WAIT** means: let the previous block's jobs finish (`s
 GPU-h are L40S estimates. Training numbers come from measured runtimes; evaluation numbers are
 rougher, so check the first job of each kind with `sacct -j JOBID --format=JobName,Elapsed,State`.
 
-Total: about **300 GPU-h** (about 370 if step 9 runs).
+Total: about **290 GPU-h** (about 370 if step 9 runs).
 
 ## 0. Every login
 
@@ -18,9 +18,8 @@ export MFR_OUTPUT_DIR=/project2/xiangren_1987/grp26-mfr-dpo/artifacts
 export LLAMA_OUT=/project2/xiangren_1987/grp26-mfr-dpo/artifacts_llama32_3b
 export ACCT=xiangren_1987
 
-# helpers (from step 4 on; set EWC to your step-3 choice)
-export EWC=ewc_1000
-QWEN_METHODS="random random_high mfr lowest_margin mir_dpo cpmr dapr_weak $EWC"
+# helpers (from step 4 on). LoRA-EWC is not in the grid: docs/EWC_DECISION.md
+QWEN_METHODS="random random_high mfr lowest_margin mir_dpo cpmr dapr_weak"
 R=$MFR_OUTPUT_DIR/runs
 LR=$LLAMA_OUT/runs
 E="python scripts/submit_eval_carc.py"
@@ -101,18 +100,18 @@ When they finish, look at 07a (ranking, uncertainty) and the last section of 07b
 failure-tier share). They qualify for the confirmation grid under the FREEZE.md rule; if so, add them
 to `METHODS_B` in step 5.
 
-## 3. Choose the EWC coefficient, then freeze (0 GPU-h)
+## 3. Freeze (0 GPU-h)
 
-Open `notebooks/07a_results.ipynb` (section 11) and apply the frozen rule. On your laptop, fill
+After the Balanced/At-Risk jobs (2d) finish, decide in 07a whether either joins the grid (FREEZE.md
+rule). LoRA-EWC is not in the grid (docs/EWC_DECISION.md). On your laptop, fill
 `docs/FREEZE.md`, commit, `git tag freeze-v1`, then `git push origin complete --tags`. On CARC:
 
 ```bash
 git pull --tags
 git describe --tags        # must show freeze-v1
-export EWC=ewc_1000        # <- your choice; re-paste the helpers
 ```
 
-If At-Risk or Balanced MFR qualify, append them to `METHODS_B` in step 5 and use `--time 05:00:00`.
+If At-Risk or Balanced MFR qualify, append them to `METHODS_B` in step 5 (`--time 04:00:00` still fits).
 
 ## 4. Qwen `none` for the 22 new cells (22 jobs, ~8 GPU-h)
 
@@ -121,11 +120,11 @@ for order in 5 6; do for seed in 0 1; do submit_none $order $seed; done; done
 for order in 1 2 3 4 5 6; do for seed in 2 3 4; do submit_none $order $seed; done; done
 ```
 
-## 5. Qwen, all other methods (44 jobs, ~92 GPU-h; WAIT for step 4)
+## 5. Qwen, all other methods (44 jobs, ~83 GPU-h; WAIT for step 4)
 
 ```bash
 METHODS_A=random,random_high,mfr,lowest_margin
-METHODS_B=mir_dpo,cpmr,dapr_weak,$EWC
+METHODS_B=mir_dpo,cpmr,dapr_weak
 submit_methods() {
   for methods in $METHODS_A $METHODS_B; do
     python scripts/submit_carc.py group --output-dir "$MFR_OUTPUT_DIR" --account $ACCT \
@@ -168,7 +167,7 @@ done
 
 The pilot's runs are skipped automatically. The Qwen joint runs (seeds 0–4) are already done.
 
-## 8. Look 1: locked test (275 jobs, ~35 GPU-h; WAIT for step 5)
+## 8. Look 1: locked test (245 jobs, ~31 GPU-h; WAIT for step 5)
 
 ```bash
 for run in $R/v2_o[1-6]_none_s[0-4]; do locked $run; done

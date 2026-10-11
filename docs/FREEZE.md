@@ -1,16 +1,17 @@
 # Confirmation freeze (draft — commit and tag `freeze-v1` BEFORE any seed 2–4 run)
 
-Frozen on: ____ (commit: ____). Nothing below changes after the tag, except the EWC λ
-(`freeze-v2`, chosen on the 8 development cells with the frozen rule in `docs/CARC.md`).
+Frozen on: ____ (commit: ____). Nothing below changes after the tag.
 
 ## Methods
 - **Final anchored method:** `dapr_weak` (`anchor_strength = 0.01`). Selected on Oct 9 by the frozen
   rule: passes the 2-point final-task rule (6/8 cells) and has the highest final three-behavior
   average (73.44). No further strengths are added for selection.
 - **Qwen confirmation grid** (orders 1–6 × seeds 0–4): `none`, `random`, `random_high`, `mfr`,
-  `lowest_margin`, `mir_dpo`, `cpmr`, `dapr_weak`, selected `ewc_*`. Joint reference: seeds 0–4.
+  `lowest_margin`, `mir_dpo`, `cpmr`, `dapr_weak`. Joint reference: seeds 0–4.
 - **Development ablations only (8 cells):** `fmcr`, `dapr`, `dapr_gated`, `dapr_c`, `copr_adapted`
-  ("COPR-inspired adaptation"), unselected `ewc_*`. At-Risk / Balanced MFR join the grid only if
+  ("COPR-inspired adaptation"), LoRA-EWC λ ∈ {100, 1,000, 10,000} (dropped from confirmation:
+  no setting beats no replay on the final average; see `docs/EWC_DECISION.md`). At-Risk / Balanced
+  MFR join the grid only if
   they finish before this tag and clearly beat MFR on the development cells.
 - **Llama-3.2-3B transfer** (orders 1–6 × seeds 0–2): `none`, `random`, `lowest_margin`, `mfr`,
   `dapr_weak`; joint seeds 0–2. Same hyperparameters as Qwen, no retuning. Chat-template date
@@ -39,8 +40,9 @@ worst-behavior retention.
   look-1 result changes methods, metrics or analysis. Both looks are reported.
 - Everything else is exploratory. Llama: report direction and per-cell sign agreement.
 
-## Generation evaluation (`configs/evaluation_protocol.json` v1.1)
-Greedy, max 512 new tokens, batch 32, same prompts for every method.
+## Generation evaluation (`configs/evaluation_protocol.json` v1.2)
+Greedy, max 512 new tokens, same prompts for every method, vLLM (dequantized NF4 base + LoRA;
+parity with the Hugging Face path checked by `scripts/check_vllm_parity.py`).
 - Safety: locked PKU prompts, XSTest (250 safe + 200 unsafe), HarmBench standard (200,
   DirectRequest) — graded by WildGuard (harm and refusal).
 - IFEval (lm-eval, prompt-level strict).
