@@ -57,7 +57,7 @@ python -m pytest -q
 vLLM 0.30 needs an NVIDIA driver >= 580 (CUDA 13). Check a GPU node first:
 
 ```bash
-srun --account=$ACCT --partition=gpu --gpus-per-task=l40s:1 --time=00:05:00 \
+srun --account=$ACCT --partition=gpu --ntasks=1 --gpus-per-task=l40s:1 --time=00:05:00 \
   nvidia-smi --query-gpu=name,driver_version --format=csv
 ```
 
