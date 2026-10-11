@@ -11,8 +11,10 @@ Frozen on: ____ (commit: ____). Nothing below changes after the tag.
 - **Development ablations only (8 cells):** `fmcr`, `dapr`, `dapr_gated`, `dapr_c`, `copr_adapted`
   ("COPR-inspired adaptation"), LoRA-EWC λ ∈ {100, 1,000, 10,000} (dropped from confirmation:
   no setting beats no replay on the final average; see `docs/EWC_DECISION.md`). At-Risk / Balanced
-  MFR join the grid only if
-  they finish before this tag and clearly beat MFR on the development cells.
+  MFR were evaluated on the
+  development cells and stay development ablations: neither beats MFR (Balanced MFR: retention
+  −4.91 vs −4.88, final average 71.94 vs 71.98; At-Risk MFR: retention −5.68, final average 72.07,
+  with 100% of its replay slots in the policy-failure tier, so the zero threshold does not select).
 - **Llama-3.2-3B transfer** (orders 1–6 × seeds 0–2): `none`, `random`, `lowest_margin`, `mfr`,
   `dapr_weak`; joint seeds 0–2. Same hyperparameters as Qwen, no retuning. Chat-template date
   pinned to "26 Jul 2024".

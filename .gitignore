@@ -14,3 +14,7 @@ artifacts/
 *.pt
 *.pth
 .env
+
+# Slurm logs written into the repo (an untracked file makes the checkout "dirty" and blocks new runs)
+*.out
+slurm-*.out

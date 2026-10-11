@@ -14,6 +14,7 @@ eval "$(conda shell.bash hook)"
 conda activate "$CONDA_ENV"
 
 PYTHON_BIN="$CONDA_ENV/bin/python"
+export PATH="$CONDA_ENV/bin:$PATH"   # lm-eval and vLLM workers come from the same env
 if [[ ! -x "$PYTHON_BIN" ]]; then
   echo "Python executable not found: $PYTHON_BIN" >&2
   exit 1

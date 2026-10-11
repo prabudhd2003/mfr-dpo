@@ -83,7 +83,8 @@ def main():
         model = (vllm_model_args(run_dir, settings, adapter, config, seed) if engine == "vllm"
                  else hf_model_args(settings, adapter, output))
         # Legacy form (no `run` subcommand) works on old and new lm-eval versions.
-        command = ["lm-eval", *model, "--tasks", "ifeval", "--apply_chat_template",
+        local = Path(sys.executable).with_name("lm-eval")     # the env's own lm-eval, not PATH's
+        command = [str(local) if local.exists() else "lm-eval", *model, "--tasks", "ifeval", "--apply_chat_template",
                    "--output_path", str(output), "--log_samples"]
         if args.limit:
             command += ["--limit", str(args.limit)]
