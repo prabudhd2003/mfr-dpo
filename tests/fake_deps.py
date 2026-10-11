@@ -27,6 +27,8 @@ def install():
     torch.bfloat16 = torch.float16 = torch.float32 = "dtype"
     torch.zeros = lambda *a, **k: None
     torch.tensor = lambda *a, **k: None
+    # scipy.stats checks isinstance(x, torch.Tensor) whenever "torch" is in sys.modules.
+    torch.Tensor = type("Tensor", (), {})
     sys.modules["torch"] = torch
     sys.modules["torch.nn"] = types.ModuleType("torch.nn")
     sys.modules["torch.nn.functional"] = torch.nn.functional
