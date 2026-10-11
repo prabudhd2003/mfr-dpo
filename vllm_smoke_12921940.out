@@ -1,0 +1,7 @@
+
+=================== 0/6 versions
+name, driver_version
+NVIDIA L40S, 580.159.04
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+ModuleNotFoundError: No module named 'torch'
