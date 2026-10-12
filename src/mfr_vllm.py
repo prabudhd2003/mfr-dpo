@@ -13,7 +13,12 @@ what Hugging Face generate() applied in the old path.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+
+# FlashInfer's sampler JIT-compiles CUDA kernels and needs nvcc, which CARC GPU nodes lack.
+# Greedy decoding does not need it; the job scripts set this too.
+os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
 
 from mfr_utils import pin_chat_template_date
 

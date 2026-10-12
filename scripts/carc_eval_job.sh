@@ -15,6 +15,17 @@ conda activate "$CONDA_ENV"
 
 PYTHON_BIN="$CONDA_ENV/bin/python"
 export PATH="$CONDA_ENV/bin:$PATH"   # lm-eval and vLLM workers come from the same env
+# vLLM: use PyTorch top-k/top-p instead of FlashInfer's sampler, which JIT-compiles CUDA code and
+# needs nvcc (CARC GPU nodes have no /usr/local/cuda). If another FlashInfer kernel still needs nvcc,
+# point CUDA_HOME at the nvcc that pip installed into the env.
+export VLLM_USE_FLASHINFER_SAMPLER=0
+if [[ -z "${CUDA_HOME:-}" ]]; then
+  NVCC_BIN=$(find "$CONDA_ENV/lib" -path '*/site-packages/nvidia/*' -name nvcc -type f 2>/dev/null | head -1 || true)
+  if [[ -n "$NVCC_BIN" ]]; then
+    export CUDA_HOME="$(dirname "$(dirname "$NVCC_BIN")")"
+    export PATH="$(dirname "$NVCC_BIN"):$PATH"
+  fi
+fi
 if [[ ! -x "$PYTHON_BIN" ]]; then
   echo "Python executable not found: $PYTHON_BIN" >&2
   exit 1
