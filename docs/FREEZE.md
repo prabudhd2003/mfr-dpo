@@ -13,7 +13,7 @@ Frozen on: ____ (commit: ____). Nothing below changes after the tag.
   no setting beats no replay on the final average; see `docs/EWC_DECISION.md`). At-Risk / Balanced
   MFR were evaluated on the
   development cells and stay development ablations: neither beats MFR (Balanced MFR: retention
-  −4.91 vs −4.88, final average 71.94 vs 71.98; At-Risk MFR: retention −5.68, final average 72.07,
+  −4.91 vs −4.88, final average 71.94 vs 71.98; At-Risk MFR: retention −5.69, final average 72.00,
   with 100% of its replay slots in the policy-failure tier, so the zero threshold does not select).
 - **Llama-3.2-3B transfer** (orders 1–6 × seeds 0–2): `none`, `random`, `lowest_margin`, `mfr`,
   `dapr_weak`; joint seeds 0–2. Same hyperparameters as Qwen, no retuning. Chat-template date
