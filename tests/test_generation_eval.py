@@ -70,3 +70,12 @@ def test_pairwise_human_review_is_blinded_and_scores_candidate(tmp_path):
     _, summary = score_pairwise_reviews([completed], key, seed=7, bootstrap_samples=100)
     overall = summary[summary["behavior"] == "overall"].iloc[0]
     assert overall["candidate_score_pct"] == 100.0
+
+
+def test_reward_judge_compare_is_order_free():
+    from mfr_reward_judge import compare, mirror, uses_reward_judge
+    choices = compare([2.0, 1.0, 3.0], [1.0, 2.0, 3.0])
+    assert choices == ["A", "B", "TIE"]
+    assert mirror(choices) == ["B", "A", "TIE"]
+    assert compare([1.0, 2.0, 3.0], [2.0, 1.0, 3.0]) == mirror(choices)
+    assert uses_reward_judge({"type": "reward_model"}) and not uses_reward_judge({})

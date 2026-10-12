@@ -29,6 +29,7 @@ from mfr_generation_eval import (
     reconcile_pairwise_choices,
 )
 from mfr_utils import file_sha256, load_protocol, save_json_atomic
+from mfr_reward_judge import RewardJudge, compare, mirror, uses_reward_judge
 from mfr_vllm import evaluator, vllm_version
 
 
@@ -72,10 +73,11 @@ def main():
 
     protocol = load_protocol(ROOT / "configs" / "experiment_protocol.json")
     splits = mfr_data.load_splits(ROOT / protocol["data_dir"])
-    use_reference = bool(config.get("use_reference", False))
-    if use_reference:
+    if bool(config.get("use_reference", False)):
         raise ValueError("judge validation requires the no-reference prompt (use_reference=false)")
-    judge = evaluator(config)
+    reward = uses_reward_judge(config)
+    judge = (RewardJudge(config["model_name"], config["model_revision"], config.get("max_length", 16384))
+             if reward else evaluator(config))
 
     rows = []
     for behavior in check["behaviors"]:
@@ -86,17 +88,29 @@ def main():
                    for r in pairs.itertuples(index=False)]
         reverse = [prometheus_prompt(r.prompt, r.rejected, r.chosen, behavior)
                    for r in pairs.itertuples(index=False)]
-        texts = judge(forward + reverse, f"validate {behavior}")
-        f_text, r_text = texts[:len(pairs)], texts[len(pairs):]
-        f_choice = [parse_prometheus_choice(t) for t in f_text]
-        r_choice = [parse_prometheus_choice(t) for t in r_text]
-        resolved = [reconcile_pairwise_choices(a, b) for a, b in zip(f_choice, r_choice)]
-        frame = pd.DataFrame({
-            "id": pairs["id"].values, "behavior": behavior,
-            "forward_choice": f_choice, "reverse_choice": r_choice,
-            "final_choice": [x[0] for x in resolved], "position_consistent": [x[1] for x in resolved],
-            "forward_judgment": f_text, "reverse_judgment": r_text,
-        })
+        if reward:
+            chosen_scores = judge.score(pairs["prompt"], pairs["chosen"], f"validate {behavior}: chosen")
+            rejected_scores = judge.score(pairs["prompt"], pairs["rejected"],
+                                          f"validate {behavior}: rejected")
+            f_choice = compare(chosen_scores, rejected_scores)
+            frame = pd.DataFrame({
+                "id": pairs["id"].values, "behavior": behavior,
+                "forward_choice": f_choice, "reverse_choice": mirror(f_choice),
+                "final_choice": f_choice, "position_consistent": True,
+                "chosen_reward": chosen_scores, "rejected_reward": rejected_scores,
+            })
+        else:
+            texts = judge(forward + reverse, f"validate {behavior}")
+            f_text, r_text = texts[:len(pairs)], texts[len(pairs):]
+            f_choice = [parse_prometheus_choice(t) for t in f_text]
+            r_choice = [parse_prometheus_choice(t) for t in r_text]
+            resolved = [reconcile_pairwise_choices(a, b) for a, b in zip(f_choice, r_choice)]
+            frame = pd.DataFrame({
+                "id": pairs["id"].values, "behavior": behavior,
+                "forward_choice": f_choice, "reverse_choice": r_choice,
+                "final_choice": [x[0] for x in resolved], "position_consistent": [x[1] for x in resolved],
+                "forward_judgment": f_text, "reverse_judgment": r_text,
+            })
         path = out / f"{behavior}.csv"
         frame.to_csv(path, index=False)
         evaluation_manifest(path, [evaluation_path], evaluator_model=config["model_name"],

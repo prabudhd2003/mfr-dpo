@@ -1,5 +1,5 @@
 {
-  "evaluation_version": "1.2",
+  "evaluation_version": "1.3",
   "generation": {
     "batch_size": 32,
     "do_sample": false,
@@ -30,15 +30,13 @@
     "max_model_len": 8192
   },
   "pairwise_judge": {
-    "model_name": "prometheus-eval/prometheus-7b-v2.0",
-    "model_revision": "66ffb1fc20beebfb60a3964a957d9011723116c5",
-    "batch_size": 2,
-    "max_new_tokens": 512,
-    "score_both_orders": true,
-    "use_reference": false,
-    "prompt_format": "prometheus-eval RELATIVE_PROMPT_WO_REF in FastChat mistral conversation",
-    "engine": "vllm",
-    "max_model_len": 16384
+    "type": "reward_model",
+    "model_name": "Skywork/Skywork-Reward-V2-Llama-3.1-8B",
+    "model_revision": "cba2f842f3f1af2f1b2f0d35e794d789976390c5",
+    "max_length": 16384,
+    "decision": "each response scored independently; higher scalar reward wins; equal rewards = tie; no A/B position effect",
+    "prompt_format": "tokenizer chat template over [user, assistant], no system prompt, leading BOS string removed (model card)",
+    "use_reference": false
   },
   "judge_validation": {
     "split": "val",
@@ -62,5 +60,18 @@
     "policy_base": "training NF4 weights dequantized to bf16 (scripts/prepare_vllm_base.py) + LoRA adapter",
     "parity": "scripts/check_vllm_parity.py, >= 90% mean prefix agreement over 64 greedy tokens on 21 val prompts",
     "fallback": "set every engine to hf"
-  }
+  },
+  "rejected_judges": [
+    {
+      "model_name": "prometheus-eval/prometheus-7b-v2.0",
+      "model_revision": "66ffb1fc20beebfb60a3964a957d9011723116c5",
+      "date": "2026-10-12",
+      "split": "val",
+      "pairs": 400,
+      "agreement_pct": 56.25,
+      "position_consistent_pct": 78.25,
+      "threshold_pct": 70.0,
+      "reason": "failed the predeclared human-agreement check"
+    }
+  ]
 }

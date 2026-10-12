@@ -62,7 +62,7 @@ head -c 600 "$RUN/generation/smoke/safe_test.jsonl"; echo
 step "4/6 WildGuard on the smoke generations"
 "$PY" scripts/run_safety_eval.py --run-dir "$RUN" --smoke --overwrite
 
-step "5/6 Prometheus on 10 validation pairs per behavior"
+step "5/6 reward judge on 10 validation pairs per behavior"
 "$PY" scripts/validate_judge.py --output-dir "$OUT" --limit 10 --overwrite
 
 step "6/6 IFEval, 10 prompts"

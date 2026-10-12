@@ -36,6 +36,7 @@ from mfr_generation_eval import (
     summarize_pairwise,
 )
 from mfr_utils import save_json_atomic
+from mfr_reward_judge import RewardJudge, compare, mirror, uses_reward_judge
 from mfr_vllm import evaluator, vllm_version
 
 
@@ -99,32 +100,22 @@ def judge_comparison(job, judge, config, protocol, protocol_path):
             raise ValueError(f"prompt mismatch in {behavior} generations")
         if not (paired["chosen_candidate"] == paired["chosen_baseline"]).all():
             raise ValueError(f"reference-response mismatch in {behavior} generations")
-        forward_prompts = [prometheus_prompt(
-            row.prompt_candidate, row.response_candidate, row.response_baseline, behavior,
-            reference=row.chosen_candidate if use_reference else None,
-        ) for row in paired.itertuples(index=False)]
-        reverse_prompts = [prometheus_prompt(
-            row.prompt_candidate, row.response_baseline, row.response_candidate, behavior,
-            reference=row.chosen_candidate if use_reference else None,
-        ) for row in paired.itertuples(index=False)]
-        # one call for both orders keeps the GPU busy; split afterwards
-        texts = judge(forward_prompts + reverse_prompts, f"judge {output_dir.name} {behavior}")
-        forward_text, reverse_text = texts[:len(paired)], texts[len(paired):]
-        forward_choices = [parse_prometheus_choice(text) for text in forward_text]
-        reverse_choices = [parse_prometheus_choice(text) for text in reverse_text]
-        resolved = [reconcile_pairwise_choices(a, b) for a, b in zip(forward_choices, reverse_choices)]
-        scored = pd.DataFrame({
-            "id": paired["id"],
-            "behavior": behavior,
-            "candidate_method": candidate_label,
-            "baseline_method": baseline_label,
-            "forward_choice": forward_choices,
-            "reverse_choice": reverse_choices,
-            "final_choice": [item[0] for item in resolved],
-            "position_consistent": [item[1] for item in resolved],
-            "forward_judgment": forward_text,
-            "reverse_judgment": reverse_text,
-        })
+        if uses_reward_judge(config):
+            candidate_scores = judge.score(paired["prompt_candidate"], paired["response_candidate"],
+                                           f"reward {output_dir.name} {behavior}: candidate")
+            baseline_scores = judge.score(paired["prompt_candidate"], paired["response_baseline"],
+                                          f"reward {output_dir.name} {behavior}: baseline")
+            choices = compare(candidate_scores, baseline_scores)
+            scored = pd.DataFrame({
+                "id": paired["id"], "behavior": behavior,
+                "candidate_method": candidate_label, "baseline_method": baseline_label,
+                "forward_choice": choices, "reverse_choice": mirror(choices),
+                "final_choice": choices, "position_consistent": True,
+                "candidate_reward": candidate_scores, "baseline_reward": baseline_scores,
+            })
+        else:
+            scored = prometheus_judgments(paired, behavior, judge, config, use_reference,
+                                          output_dir, candidate_label, baseline_label)
         output_path = output_dir / f"{behavior}.csv"
         scored.to_csv(output_path, index=False)
         summary = summarize_pairwise(scored, candidate_label, baseline_label)
@@ -133,8 +124,8 @@ def judge_comparison(job, judge, config, protocol, protocol_path):
         evaluation_manifest(
             output_path, [candidate_path, baseline_path, protocol_path],
             evaluator_model=config["model_name"], evaluator_revision=config["model_revision"],
-            evaluation_version=protocol["evaluation_version"], score_both_orders=True,
-            engine=config.get("engine", "vllm"), vllm_version=vllm_version(),
+            evaluation_version=protocol["evaluation_version"],
+            judge_type=config.get("type", "generative"), vllm_version=vllm_version(),
         )
     summary = pd.DataFrame(summaries)
     summary.to_csv(output_dir / "summary.csv", index=False)
@@ -142,6 +133,38 @@ def judge_comparison(job, judge, config, protocol, protocol_path):
                      output_dir / "summary.json")
     print(summary.round(2).to_string(index=False), flush=True)
     print(f"Saved pairwise judgments to {output_dir}", flush=True)
+
+
+def prometheus_judgments(paired, behavior, judge, config, use_reference, output_dir,
+                         candidate_label, baseline_label):
+    """Generative judge (kept for the record; Prometheus failed validation), both A/B orders."""
+    forward_prompts = [prometheus_prompt(
+        row.prompt_candidate, row.response_candidate, row.response_baseline, behavior,
+        reference=row.chosen_candidate if use_reference else None,
+    ) for row in paired.itertuples(index=False)]
+    reverse_prompts = [prometheus_prompt(
+        row.prompt_candidate, row.response_baseline, row.response_candidate, behavior,
+        reference=row.chosen_candidate if use_reference else None,
+    ) for row in paired.itertuples(index=False)]
+    # one call for both orders keeps the GPU busy; split afterwards
+    texts = judge(forward_prompts + reverse_prompts, f"judge {output_dir.name} {behavior}")
+    forward_text, reverse_text = texts[:len(paired)], texts[len(paired):]
+    forward_choices = [parse_prometheus_choice(text) for text in forward_text]
+    reverse_choices = [parse_prometheus_choice(text) for text in reverse_text]
+    resolved = [reconcile_pairwise_choices(a, b) for a, b in zip(forward_choices, reverse_choices)]
+    scored = pd.DataFrame({
+        "id": paired["id"],
+        "behavior": behavior,
+        "candidate_method": candidate_label,
+        "baseline_method": baseline_label,
+        "forward_choice": forward_choices,
+        "reverse_choice": reverse_choices,
+        "final_choice": [item[0] for item in resolved],
+        "position_consistent": [item[1] for item in resolved],
+        "forward_judgment": forward_text,
+        "reverse_judgment": reverse_text,
+    })
+    return scored
 
 
 def main():
@@ -178,8 +201,9 @@ def main():
     protocol_path = ROOT / "configs" / "evaluation_protocol.json"
     protocol = load_evaluation_protocol(protocol_path)
     config = protocol["pairwise_judge"]
-    print(f"Loading pairwise judge {config['model_name']} ({config.get('engine', 'vllm')})...", flush=True)
-    judge = evaluator(config)
+    print(f"Loading pairwise judge {config['model_name']}...", flush=True)
+    judge = (RewardJudge(config["model_name"], config["model_revision"], config.get("max_length", 16384))
+             if uses_reward_judge(config) else evaluator(config))
     for job in jobs:
         judge_comparison(job, judge, config, protocol, protocol_path)
 

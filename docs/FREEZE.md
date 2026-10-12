@@ -42,15 +42,16 @@ worst-behavior retention.
   look-1 result changes methods, metrics or analysis. Both looks are reported.
 - Everything else is exploratory. Llama: report direction and per-cell sign agreement.
 
-## Generation evaluation (`configs/evaluation_protocol.json` v1.2)
+## Generation evaluation (`configs/evaluation_protocol.json` v1.3)
 Greedy, max 512 new tokens, same prompts for every method, vLLM (dequantized NF4 base + LoRA;
 parity with the Hugging Face path checked by `scripts/check_vllm_parity.py`).
 - Safety: locked PKU prompts, XSTest (250 safe + 200 unsafe), HarmBench standard (200,
   DirectRequest) — graded by WildGuard (harm and refusal).
 - IFEval (lm-eval, prompt-level strict).
-- Helpful/Quality: Prometheus-2-7B pairwise, no reference, both A/B orders, inconsistent = tie.
-  Used only if `scripts/validate_judge.py` agreement with human labels (validation pairs) ≥ 70%;
-  otherwise a pinned API judge, validated the same way.
+- Helpful/Quality: reward-model judge `Skywork/Skywork-Reward-V2-Llama-3.1-8B` (pinned revision): each
+  response is scored on its own and the higher reward wins, so there is no A/B position effect.
+  Used only if `scripts/validate_judge.py` agreement with human labels (validation pairs) ≥ 70%.
+  Prometheus-2-7B was tried first and rejected (56% agreement; `rejected_judges` in the protocol).
 - Behavioral forgetting: post-stage vs final checkpoint (Safety via WildGuard; Helpful/Quality via
-  the judge, 150 prompts).
+  the reward judge, 150 prompts).
 - No human evaluation (stated in Limitations).

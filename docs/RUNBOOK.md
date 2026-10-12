@@ -73,7 +73,7 @@ If the driver is older than 580, tell me before installing; we pin an older vLLM
 ## 2c. Smoke test on one finished run (1 job, ~0.5 GPU-h)
 
 Builds the vLLM base, checks HF-vs-vLLM parity, and runs a few prompts through generation,
-WildGuard, Prometheus and IFEval. It writes only to smoke folders.
+WildGuard, the reward judge and IFEval. It writes only to smoke folders.
 
 ```bash
 sbatch --account=$ACCT scripts/carc_vllm_smoke.sh $R/v2_o1_dapr_weak_s0 $MFR_OUTPUT_DIR
@@ -257,7 +257,7 @@ for m in none $QWEN_METHODS; do
   $E safety $OUT --run-dir $R/v2_o[1246]_${m}_s[0-4] --checkpoint post_stage --behavior safe
 done
 
-# 10e. Prometheus (10 jobs, ~3 GPU-h)
+# 10e. Reward-model judge (10 jobs, ~1 GPU-h)
 for m in random mfr lowest_margin dapr_weak; do
   $E judge $OUT --within-run $R/v2_o[15]_${m}_s[2-4] --behaviors helpful
   $E judge $OUT --within-run $R/v2_o[34]_${m}_s[2-4] --behaviors quality
