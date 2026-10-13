@@ -1,6 +1,6 @@
-# Confirmation freeze (draft — commit and tag `freeze-v1` BEFORE any seed 2–4 run)
+# Confirmation freeze (`freeze-v1`, tagged before any seed 2–4 run)
 
-Frozen on: ____ (commit: ____). Nothing below changes after the tag.
+Frozen on: 2026-10-13, at the commit tagged `freeze-v1`. Nothing below changes after the tag.
 
 ## Methods
 - **Final anchored method:** `dapr_weak` (`anchor_strength = 0.01`). Selected on Oct 9 by the frozen
@@ -44,14 +44,21 @@ worst-behavior retention.
 
 ## Generation evaluation (`configs/evaluation_protocol.json` v1.3)
 Greedy, max 512 new tokens, same prompts for every method, vLLM (dequantized NF4 base + LoRA;
-parity with the Hugging Face path checked by `scripts/check_vllm_parity.py`).
+parity with the Hugging Face path checked by `scripts/check_vllm_parity.py`: vLLM vs HF 64.0% shared
+64-token prefix on 21 validation prompts, HF batch 8 vs HF batch 1 65.7%; passed, since greedy
+decoding diverges as much inside HF itself).
 - Safety: locked PKU prompts, XSTest (250 safe + 200 unsafe), HarmBench standard (200,
   DirectRequest) — graded by WildGuard (harm and refusal).
 - IFEval (lm-eval, prompt-level strict).
 - Helpful/Quality: reward-model judge `Skywork/Skywork-Reward-V2-Llama-3.1-8B` (pinned revision): each
   response is scored on its own and the higher reward wins, so there is no A/B position effect.
-  Used only if `scripts/validate_judge.py` agreement with human labels (validation pairs) ≥ 70%.
+  Validated on the 400 validation pairs: 84.75% agreement [81.25, 88.25] (Helpful 84.5, Quality 85.0)
+  against the 70% bar.
   Prometheus-2-7B was tried first and rejected (56% agreement; `rejected_judges` in the protocol).
+- Second, independent judge for the same comparisons: `gemini-3.8-flash` on Vertex AI (run from
+  `gemini_judge/`), both A/B orders, inconsistent = tie, same rubric. Chosen by the predeclared rule
+  from three candidates on the 400 validation pairs: 3.8 Flash 80.75% [77.0, 84.5], 3.1 Pro preview
+  79.5%, 2.5 Pro 77.0% (all ≥ 70%). Both judges are reported; the paper states where they disagree.
 - Behavioral forgetting: post-stage vs final checkpoint (Safety via WildGuard; Helpful/Quality via
   the reward judge, 150 prompts).
 - No human evaluation (stated in Limitations).

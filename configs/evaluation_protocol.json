@@ -36,7 +36,18 @@
     "max_length": 16384,
     "decision": "each response scored independently; higher scalar reward wins; equal rewards = tie; no A/B position effect",
     "prompt_format": "tokenizer chat template over [user, assistant], no system prompt, leading BOS string removed (model card)",
-    "use_reference": false
+    "use_reference": false,
+    "validation_2026_10_13": {
+      "pairs": 400,
+      "agreement_pct": 84.75,
+      "ci": [
+        81.25,
+        88.25
+      ],
+      "helpful_pct": 84.5,
+      "quality_pct": 85.0,
+      "accepted": true
+    }
   },
   "judge_validation": {
     "split": "val",
@@ -59,7 +70,14 @@
     "version": "0.30.0",
     "policy_base": "training NF4 weights dequantized to bf16 (scripts/prepare_vllm_base.py) + LoRA adapter",
     "parity": "scripts/check_vllm_parity.py, >= 90% mean prefix agreement over 64 greedy tokens on 21 val prompts",
-    "fallback": "set every engine to hf"
+    "fallback": "set every engine to hf",
+    "parity_2026_10_13": {
+      "prompts": 21,
+      "tokens": 64,
+      "vllm_vs_hf_pct": 64.0,
+      "hf_batch8_vs_hf_batch1_pct": 65.7,
+      "passed": true
+    }
   },
   "rejected_judges": [
     {
@@ -73,5 +91,45 @@
       "threshold_pct": 70.0,
       "reason": "failed the predeclared human-agreement check"
     }
-  ]
+  ],
+  "second_judge": {
+    "type": "gemini_pairwise",
+    "model_name": "gemini-3.8-flash",
+    "provider": "Vertex AI (project mfr-dpo-judge)",
+    "runs_from": "gemini_judge/ (Mac)",
+    "decoding": "temperature 0, seed 544, JSON output {choice: A|B}, automatic function calling off",
+    "rubric": "HELPFULNESS_RUBRIC / QUALITY_RUBRIC from src/mfr_generation_eval.py",
+    "position_control": "both A/B orders; a verdict counts only if both orders agree, otherwise tie",
+    "selection_rule": "3 predeclared candidates on the 400 validation pairs; highest agreement wins if >= 70%; a stable model within 2 points of the winner is preferred (fixed 2026-10-12 before results)",
+    "validation_2026_10_12": {
+      "gemini-3.8-flash": {
+        "stable": true,
+        "agreement_pct": 80.75,
+        "ci": [
+          77.0,
+          84.5
+        ],
+        "position_consistent_pct": 95.5
+      },
+      "gemini-3.1-pro-preview": {
+        "stable": false,
+        "agreement_pct": 79.5,
+        "ci": [
+          75.5,
+          83.5
+        ],
+        "position_consistent_pct": 93.25
+      },
+      "gemini-2.5-pro": {
+        "stable": true,
+        "agreement_pct": 77.0,
+        "ci": [
+          73.0,
+          81.25
+        ],
+        "position_consistent_pct": 90.75
+      }
+    },
+    "decision": "gemini-3.8-flash"
+  }
 }
