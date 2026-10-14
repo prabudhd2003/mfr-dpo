@@ -104,3 +104,16 @@ def test_stage1_rejects_a_changed_training_input():
         raise AssertionError("expected incompatible stage 1")
     except ValueError as error:
         assert "lr" in str(error)
+
+
+def test_pin_chat_template_date_handles_llama_32_template():
+    from types import SimpleNamespace
+    from mfr_utils import pin_chat_template_date
+    template = ('{%- if not date_string is defined %}{%- if strftime_now is defined %}'
+                '{%- set date_string = strftime_now("%d %b %Y") %}{%- else %}'
+                '{%- set date_string = "26 Jul 2024" %}{%- endif %}{%- endif %}Today Date: {{ date_string }}')
+    tok = pin_chat_template_date(SimpleNamespace(chat_template=template))
+    assert 'strftime_now("' not in tok.chat_template and '"26 Jul 2024"' in tok.chat_template
+    import pytest
+    with pytest.raises(ValueError):
+        pin_chat_template_date(SimpleNamespace(chat_template="{{ strftime_now('%Y') }}"))

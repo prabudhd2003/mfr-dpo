@@ -3,6 +3,7 @@
 import hashlib
 import importlib.metadata as meta
 import json
+import re
 import os
 from pathlib import Path
 import random
@@ -142,7 +143,9 @@ def pin_chat_template_date(tokenizer, date=FIXED_CHAT_TEMPLATE_DATE):
     if isinstance(template, str) and "strftime_now" in template:
         pinned = template.replace('strftime_now("%d %b %Y")', f'"{date}"')
         pinned = pinned.replace("strftime_now('%d %b %Y')", f'"{date}"')
-        if "strftime_now" in pinned:
+        # Llama 3.x also tests `strftime_now is defined`; that test is harmless once every call is
+        # replaced (both branches then use the fixed date). Any remaining call is an unknown form.
+        if re.search(r"strftime_now\s*\(", pinned):
             raise ValueError("chat template uses strftime_now in an unrecognized form; cannot pin date")
         tokenizer.chat_template = pinned
     return tokenizer

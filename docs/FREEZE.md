@@ -55,10 +55,15 @@ decoding diverges as much inside HF itself).
   Validated on the 400 validation pairs: 84.75% agreement [81.25, 88.25] (Helpful 84.5, Quality 85.0)
   against the 70% bar.
   Prometheus-2-7B was tried first and rejected (56% agreement; `rejected_judges` in the protocol).
-- Second, independent judge for the same comparisons: `gemini-3.8-flash` on Vertex AI (run from
-  `gemini_judge/`), both A/B orders, inconsistent = tie, same rubric. Chosen by the predeclared rule
-  from three candidates on the 400 validation pairs: 3.8 Flash 80.75% [77.0, 84.5], 3.1 Pro preview
-  79.5%, 2.5 Pro 77.0% (all ≥ 70%). Both judges are reported; the paper states where they disagree.
 - Behavioral forgetting: post-stage vs final checkpoint (Safety via WildGuard; Helpful/Quality via
   the reward judge, 150 prompts).
 - No human evaluation (stated in Limitations).
+
+## Amendments after the tag (each made before any result it could affect)
+1. **2026-10-14, Llama chat-template date pin.** `pin_chat_template_date` rejected the
+   Llama-3.2 template because it also contains the test `strftime_now is defined`. The fix replaces
+   every `strftime_now(...)` call as before and allows that test (both branches then use the fixed
+   date). It changes nothing for Qwen, whose template has no date, and was made before any Llama run.
+2. **2026-10-14, second judge dropped.** The Gemini second judge was removed for cost before any
+   confirmation generation existed. Helpful/Quality comparisons use the validated reward-model judge
+   only.
