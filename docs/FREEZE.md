@@ -67,3 +67,9 @@ decoding diverges as much inside HF itself).
 2. **2026-10-14, second judge dropped.** The Gemini second judge was removed for cost before any
    confirmation generation existed. Helpful/Quality comparisons use the validated reward-model judge
    only.
+3. **2026-10-14, Llama length audit.** `validate_model_data.py` stopped on any frozen pair longer
+   than 1,024 tokens under the Llama tokenizer. It now applies the plan's rule: stop only if more
+   than 2% of a split is over the limit; otherwise the few long pairs are truncated at 1,024 tokens
+   (as `make_batch` already does, identically for every method) and listed in
+   `artifacts_llama32_3b/cache/tokenizer_validation.json`. The first audit found 8 such pairs in
+   total. Made before any Llama training run.
