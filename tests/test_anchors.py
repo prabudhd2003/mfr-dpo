@@ -11,7 +11,7 @@ import mfr_dpo
 
 
 def test_anchor_method_registry_includes_both_new_variants():
-    assert {"dapr_weak", "dapr_gated"} <= set(mfr_dpo.ANCHOR_METHODS)
+    assert {"dapr_weak", "dapr_gated", "mfr_dapr"} <= set(mfr_dpo.ANCHOR_METHODS)
 
 
 def test_live_gate_uses_strict_reference_relative_margin_regression():
@@ -113,3 +113,32 @@ def test_ungated_rates_match_the_previous_replay_share_average(monkeypatch):
     ])
     assert np.isclose(diagnostics["chosen_violation_rate"], 0.4)   # 0.2 * 0.5 + 0.6 * 0.5
     assert diagnostics["anchored_pairs"] == 2
+
+def test_mfr_dapr_anchor_penalty_equals_dapr_weak():
+    import subprocess, sys, textwrap
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    code = f"""
+    import sys, types
+    sys.path.insert(0, {str(root / 'src')!r})
+    import torch
+    sys.modules['peft'] = types.SimpleNamespace(
+    LoraConfig=object, PeftModel=object, get_peft_model=lambda *a, **k: None,
+    prepare_model_for_kbit_training=lambda *a, **k: None) 
+    sys.modules['transformers'] = types.SimpleNamespace( AutoModelForCausalLM=object, AutoTokenizer=object, BitsAndBytesConfig=object, get_linear_schedule_with_warmup=lambda *a, **k: None) 
+    import mfr_dpo 
+    from mfr_utils import load_protocol, method_anchor_strength 
+    # two pairs (chosen rows 0-1, rejected rows 2-3); pair 1 is replay 
+    token_logp = torch.tensor([-1.0, -0.4, -2.0, -0.7, -0.5, -1.7, -1.5, -3.2], requires_grad=True) 
+    seq_index = torch.tensor([0, 0, 1, 1, 2, 2, 3, 3]) 
+    policy = torch.zeros(4).index_add(0, seq_index, token_logp) 
+    batch = {{"n_pairs": 2, "is_replay": [False, True], "pair_ids": ["new", "old"], "anchor_gate_active": [True, True], "anchor_gate_recorded": [False, False]}} 
+    anchors = {{"old": {{"chosen": [-1.0, -0.5], "rejected": [-2.0, -1.5], "chosen_sum": -1.5, "rejected_sum": -3.5}}}} 
+    weak, _ = mfr_dpo._anchor_regularizer("dapr_weak", policy, token_logp, seq_index, batch, anchors) 
+    new, _ = mfr_dpo._anchor_regularizer("mfr_dapr", policy, token_logp, seq_index, batch, anchors) 
+    assert weak.item() > 0 and torch.equal(weak, new), (weak, new) 
+    protocol = load_protocol({str(root / 'configs' / 'experiment_protocol.json')!r}) 
+    assert method_anchor_strength(protocol, "mfr_dapr") == method_anchor_strength(protocol, "dapr_weak") == 0.01 
+    """
+    subprocess.run([sys.executable, "-c", textwrap.dedent(code)], check=True, capture_output=True, text=True)
+

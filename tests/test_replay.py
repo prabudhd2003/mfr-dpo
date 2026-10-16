@@ -101,7 +101,7 @@ def test_every_method_fills_exactly_the_slots():
     )
     for method in (
         "random", "random_high", "lowest_margin", "mfr", "cpmr", "dapr", "dapr_weak",
-        "dapr_gated", "dapr_c", "copr_adapted",
+        "dapr_gated", "dapr_c", "copr_adapted", "mfr_dapr",
     ):
         plan = plan_interval(buffer, method, 24, np.random.default_rng(0))
         assert len(plan) == 24
@@ -213,6 +213,7 @@ def test_only_margin_based_methods_need_live_refreshes():
     assert mfr_replay.needs_refresh("dapr_c")
     assert mfr_replay.needs_refresh("mir_dpo")
     assert mfr_replay.needs_refresh("copr_adapted")
+    assert mfr_replay.needs_refresh("mfr_dapr")
     assert not mfr_replay.needs_refresh("random")
     assert not mfr_replay.needs_refresh("random_high")
     assert not mfr_replay.needs_refresh("none")
@@ -529,3 +530,36 @@ def test_at_risk_policy_margins_survive_save_and_load(tmp_path):
     buffer.to_csv(tmp_path / "buffer.csv")
     loaded = ReplayBuffer.from_csv(tmp_path / "buffer.csv", size=20)
     assert np.allclose(loaded.rows()["current_policy_margin"], buffer.rows()["current_policy_margin"])
+
+def test_mfr_dapr_uses_exactly_mfr_selection():
+    """mfr_dapr changes only the loss (DAPR anchor); its replay plan must equal MFR's."""
+    buffer = filled_buffer(size=50, two_stages=True)
+    rows = buffer.rows()
+    current = rows["peak_margin"].copy()
+    current.iloc[[2, 9, 17, 30, 41]] -= 1.0
+    buffer.set_current(pd.Series(current.values, index=rows["id"].values))
+    for cap in (None, 0.75):
+        for seed in range(5):
+            mfr_plan = mfr_replay.plan_interval_details(
+                buffer, "mfr", 24, np.random.default_rng(seed), cap)
+            mfr_dapr_plan = mfr_replay.plan_interval_details(
+                buffer, "mfr_dapr", 24, np.random.default_rng(seed), cap)
+            assert mfr_dapr_plan["id"].tolist() == mfr_plan["id"].tolist()
+            assert np.allclose(mfr_dapr_plan["selection_score"], mfr_plan["selection_score"])
+            assert set(mfr_dapr_plan["method"]) == {"mfr_dapr"}
+
+def test_mfr_dapr_and_dapr_weak_differ_only_in_selection():
+    """A never-learned pair has a low margin but no drop: DAPR replays it, MFR-DAPR does not."""
+    buffer = filled_buffer(size=20)
+    rows = buffer.rows()
+    peak = rows.set_index("id")["peak_margin"]
+    never_learned, forgotten = rows["id"].iloc[0], rows["id"].iloc[1]
+    current = peak.copy()
+    current[never_learned] = peak.min() - 100.0        # lowest current margin, zero drop ...
+    buffer._rows.loc[buffer._rows["id"] == never_learned, "peak_margin"] = current[never_learned]
+    current[forgotten] = peak[forgotten] - 2.0         # ... vs. the largest drop
+    buffer.set_current(current)
+    dapr_pick = plan_interval(buffer, "dapr_weak", 1, np.random.default_rng(0))
+    mfr_dapr_pick = plan_interval(buffer, "mfr_dapr", 1, np.random.default_rng(0))
+    assert dapr_pick == [never_learned]
+    assert mfr_dapr_pick == [forgotten]

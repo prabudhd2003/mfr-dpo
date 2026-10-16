@@ -28,7 +28,8 @@
     "ewc_1000",
     "ewc_10000",
     "mfr_balanced",
-    "mfr_at_risk"
+    "mfr_at_risk",
+    "mfr_dapr"
   ],
   "seeds": [0, 1, 2, 3, 4],
   "extension_seeds": [5, 6, 7, 8, 9],
@@ -61,7 +62,8 @@
   "anchor_strength": 0.1,
   "anchor_strength_overrides": {
     "dapr_weak": 0.01,
-    "dapr_gated": 0.1
+    "dapr_gated": 0.1,
+    "mfr_dapr" : 0.01
   },
   "dapr_huber_delta": 1.0,
   "mir_lookahead_steps": 1,

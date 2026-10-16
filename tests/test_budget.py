@@ -118,7 +118,7 @@ def test_replay_slots_per_step():
     for method in (
         "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr", "dapr",
         "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted", "mfr_balanced",
-        "mfr_at_risk",
+        "mfr_at_risk","mfr_dapr",
     ):
         history, log = run(method)
         assert (history["n_replay"] == 2).all()                    # exactly 2 old pairs every step

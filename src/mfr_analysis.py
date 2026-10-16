@@ -13,7 +13,7 @@ import pandas as pd
 METHOD_ORDER = [
     "none", "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr",
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
-    "ewc_100", "ewc_1000", "ewc_10000", "mfr_balanced", "mfr_at_risk",
+    "ewc_100", "ewc_1000", "ewc_10000", "mfr_balanced", "mfr_at_risk","mfr_dapr",
 ]
 METHOD_COLORS = {
     "none": "#6b6a66", "random": "#2a78d6", "random_high": "#7857c5",
@@ -23,7 +23,7 @@ METHOD_COLORS = {
     "dapr_c": "#a45c00", "mir_dpo": "#008c95",
     "copr_adapted": "#b13c63",
     "ewc_100": "#4c78a8", "ewc_1000": "#355f8a", "ewc_10000": "#1f3b57",
-    "mfr_balanced": "#c0392b", "mfr_at_risk": "#7b241c",
+    "mfr_balanced": "#c0392b", "mfr_at_risk": "#7b241c","mfr_dapr":"#f2a07b",
 }
 DATASETS = ["safe", "helpful", "quality"]
 
@@ -377,6 +377,7 @@ SELECTION_SCORES = {
     "copr_adapted": lambda rows: -rows["current_margin"],
     "mfr": lambda rows: rows["peak_margin"] - rows["current_margin"],
     "mfr_balanced": lambda rows: rows["peak_margin"] - rows["current_margin"],
+    "mfr_dapr": lambda rows: rows["peak_margin"] - rows["current_margin"],
     "cpmr": lambda rows: -np.minimum(rows["current_margin"], rows["projected_margin"]),
 }
 SNAPSHOT_PREFIX = {"cpmr": "cpmr_refresh", "fmcr": "fmcr_refresh", "mir_dpo": "mir_dpo_refresh"}
