@@ -779,6 +779,7 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
                        max_tokens=1024, seed=0, max_share_per_dataset=None, score_batch_size=4,
                        desc="training", progress_path=None, save_every=25, reference_cache=None,
                        fmcr_velocity_decay=0.5, fmcr_forecast_horizon=1.0,
+                       mfr_softmax_temperature=1.0,
                        anchors=None, anchor_strength=0.1, huber_delta=1.0,
                        mir_lookahead_steps=1, ewc_states=None, ewc_coefficient=0.0):
     """Train once over new data with auditable replay; default batches are exactly 90/10 new/old."""
@@ -899,6 +900,7 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
             plan = mfr_replay.plan_interval_details(
                 buffer, method, interval_len * old_per_step, rng, max_share_per_dataset,
                 plan_index=interval, forecast_horizon=fmcr_forecast_horizon,
+                mfr_softmax_temperature=mfr_softmax_temperature,
             )
             if method == "fmcr" and progress_path:
                 refresh_path = Path(progress_path).parent / f"fmcr_refresh_{interval + 1}.csv"
@@ -965,7 +967,9 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
     elapsed = (time.time() - started) / 60
     print(f"Done: {len(rows)} new + {len(replay_log)} replayed in {elapsed:.1f} min "
           f"({scoring_seconds / 60:.1f} min scoring), peak {_peak_gb():.1f} GB")
-    columns = ["step", "interval", *mfr_replay.PLAN_COLUMNS]
+    columns = ["step", "interval", *(
+        mfr_replay.SOFTMAX_PLAN_COLUMNS if method == "mfr_softmax" else mfr_replay.PLAN_COLUMNS
+    )]
     if replay_log:
         replay_frame = pd.DataFrame(replay_log)
     else:

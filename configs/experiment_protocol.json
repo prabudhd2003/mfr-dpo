@@ -24,7 +24,8 @@
     "copr_adapted",
     "ewc_100",
     "ewc_1000",
-    "ewc_10000"
+    "ewc_10000",
+    "mfr_softmax"
   ],
   "seeds": [0, 1],
   "joint_seeds": [0, 1, 2, 3, 4],
@@ -73,5 +74,6 @@
     "do_sample": false,
     "max_new_tokens": 512,
     "batch_size": 4
-  }
+  },
+  "mfr_softmax_temperature": 1.0
 }
