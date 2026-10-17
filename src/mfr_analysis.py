@@ -11,13 +11,13 @@ import numpy as np
 import pandas as pd
 
 METHOD_ORDER = [
-    "none", "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr",
+    "none", "random", "random_high", "lowest_margin", "mfr", "mfr_softmax", "fmcr", "cpmr",
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
     "ewc_100", "ewc_1000", "ewc_10000",
 ]
 METHOD_COLORS = {
     "none": "#6b6a66", "random": "#2a78d6", "random_high": "#7857c5",
-    "lowest_margin": "#1baf7a", "mfr": "#eb6834", "fmcr": "#b52fb5",
+    "lowest_margin": "#1baf7a", "mfr": "#eb6834", "mfr_softmax": "#f39c45", "fmcr": "#b52fb5",
     "cpmr": "#7a3db8",
     "dapr": "#d68a00", "dapr_c": "#a45c00", "mir_dpo": "#008c95",
     "copr_adapted": "#b13c63",

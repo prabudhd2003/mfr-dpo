@@ -13,6 +13,7 @@ The methods differ in which stored pairs fill the replay slots of each training 
     random_high     uniform sample from the buffer with a larger budget set by the runner
     lowest_margin   the lowest current_margin (hard pairs, forgotten or not)
     mfr             the largest drop, peak_margin - current_margin (our method)
+    mfr_softmax     seeded categorical sampling from softmax(forgetting / temperature)
     fmcr            pairs forecast to cross a preference boundary before the next refresh
     cpmr            the lowest projected margin after a counterfactual new-task update interval
     dapr            lowest-margin replay plus directional peak-token anchoring
@@ -35,13 +36,13 @@ import pandas as pd
 from mfr_utils import buffer_seed
 
 METHODS = (
-    "none", "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr",
+    "none", "random", "random_high", "lowest_margin", "mfr", "mfr_softmax", "fmcr", "cpmr",
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
     "ewc_100", "ewc_1000", "ewc_10000",
 )
 REGULARIZATION_METHODS = ("ewc_100", "ewc_1000", "ewc_10000")
 REFRESH_METHODS = (
-    "lowest_margin", "mfr", "fmcr", "cpmr", "dapr", "dapr_weak", "dapr_gated",
+    "lowest_margin", "mfr", "mfr_softmax", "fmcr", "cpmr", "dapr", "dapr_weak", "dapr_gated",
     "dapr_c", "mir_dpo", "copr_adapted",
 )
 FORECAST_COLUMNS = [
@@ -58,6 +59,9 @@ EXTRA_COLUMNS = [
     *MIR_COLUMNS,
 ]
 PLAN_COLUMNS = ["id", "dataset", "selection_score", "selection_rank", "method"]
+SOFTMAX_PLAN_COLUMNS = [
+    *PLAN_COLUMNS, "softmax_probability", "selection_probability", "temperature",
+]
 FMCR_PLAN_COLUMNS = [
     *PLAN_COLUMNS, "risk_tier", "risk_label", "historical_drop",
     "current_margin", "current_policy_margin", "margin_velocity", "policy_velocity",
@@ -316,7 +320,7 @@ class ReplayBuffer:
 # -------------------------------------------------------------------- choosing
 
 def plan_interval(buffer, method, n_slots, rng, max_share_per_dataset=None,
-                  plan_index=0, forecast_horizon=1.0):
+                  plan_index=0, forecast_horizon=1.0, mfr_softmax_temperature=1.0):
     """Pair ids for the next interval's replay slots (one id per slot, in order).
 
     none: empty list. random/random_high: uniform without replacement. lowest_margin: lowest current margin.
@@ -327,17 +331,20 @@ def plan_interval(buffer, method, n_slots, rng, max_share_per_dataset=None,
     details = plan_interval_details(
         buffer, method, n_slots, rng, max_share_per_dataset,
         plan_index=plan_index, forecast_horizon=forecast_horizon,
+        mfr_softmax_temperature=mfr_softmax_temperature,
     )
     return details["id"].tolist() if len(details) else []
 
 
 def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=None,
-                          plan_index=0, forecast_horizon=1.0):
+                          plan_index=0, forecast_horizon=1.0,
+                          mfr_softmax_temperature=1.0):
     """Return the replay plan with auditable rank, score, dataset, and selection rule."""
     if method not in METHODS:
         raise ValueError(f"unknown replay method {method!r}; expected one of {METHODS}")
     if not uses_replay(method) or buffer is None or len(buffer) == 0 or n_slots <= 0:
-        columns = (FMCR_PLAN_COLUMNS if method == "fmcr" else
+        columns = (SOFTMAX_PLAN_COLUMNS if method == "mfr_softmax" else
+                   FMCR_PLAN_COLUMNS if method == "fmcr" else
                    CPMR_PLAN_COLUMNS if method == "cpmr" else
                    MIR_PLAN_COLUMNS if method == "mir_dpo" else PLAN_COLUMNS)
         return pd.DataFrame(columns=columns)
@@ -354,6 +361,10 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
         return _plan_cpmr(rows, n_slots, tiebreak, max_share_per_dataset)
     if method == "mir_dpo":
         return _plan_mir_dpo(rows, n_slots, tiebreak, max_share_per_dataset)
+    if method == "mfr_softmax":
+        return _plan_mfr_softmax(
+            rows, n_slots, rng, float(mfr_softmax_temperature), max_share_per_dataset
+        )
 
     if method in ("random", "random_high"):
         score = tiebreak
@@ -378,6 +389,62 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
     selected = pd.DataFrame(repeats).reset_index(drop=True)
     selected["method"] = method
     return selected[PLAN_COLUMNS]
+
+
+def _plan_mfr_softmax(rows, n_slots, rng, temperature=1.0, max_share_per_dataset=None):
+    """Sample replay occurrences from a softmax over historical forgetting scores.
+
+    Sampling is categorical with replacement, matching token sampling: a highly forgotten pair is
+    more likely, but lower-scoring pairs retain non-zero probability. Subtracting the maximum logit
+    makes the softmax numerically stable. ``selection_probability`` records the conditional
+    probability used for that draw; it can differ from ``softmax_probability`` when a dataset cap
+    temporarily masks candidates.
+    """
+    if not np.isfinite(temperature) or temperature <= 0:
+        raise ValueError("mfr_softmax_temperature must be a finite positive number")
+
+    work = rows.copy().reset_index(drop=True)
+    forgetting = (work["peak_margin"] - work["current_margin"]).to_numpy(dtype=float)
+    if not np.isfinite(forgetting).all():
+        raise ValueError("mfr_softmax requires finite peak and current margins")
+    logits = forgetting / temperature
+    weights = np.exp(logits - logits.max())
+    probabilities = weights / weights.sum()
+    # Rank is descriptive only; it does not determine selection.
+    rank_order = np.argsort(-forgetting, kind="stable")
+    ranks = np.empty(len(work), dtype=int)
+    ranks[rank_order] = np.arange(1, len(work) + 1)
+    work["selection_score"] = forgetting
+    work["selection_rank"] = ranks
+    work["softmax_probability"] = probabilities
+    work["temperature"] = temperature
+
+    cap = None
+    if max_share_per_dataset is not None:
+        cap = max(1, int(np.floor(float(max_share_per_dataset) * n_slots)))
+    counts = {}
+    selected = []
+    for _ in range(n_slots):
+        allowed = np.ones(len(work), dtype=bool)
+        if cap is not None:
+            allowed = np.array([
+                counts.get(dataset, 0) < cap for dataset in work["dataset"]
+            ], dtype=bool)
+            # A cap cannot be enforced when every represented dataset has reached it.
+            if not allowed.any():
+                allowed[:] = True
+        draw_weights = probabilities * allowed
+        draw_probabilities = draw_weights / draw_weights.sum()
+        index = int(rng.choice(len(work), p=draw_probabilities))
+        choice = work.iloc[index].copy()
+        choice["selection_probability"] = float(draw_probabilities[index])
+        selected.append(choice)
+        dataset = choice["dataset"]
+        counts[dataset] = counts.get(dataset, 0) + 1
+
+    result = pd.DataFrame(selected).reset_index(drop=True)
+    result["method"] = "mfr_softmax"
+    return result[SOFTMAX_PLAN_COLUMNS]
 
 
 def _plan_mir_dpo(rows, n_slots, tiebreak, max_share_per_dataset=None):
