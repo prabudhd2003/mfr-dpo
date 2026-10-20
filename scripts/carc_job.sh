@@ -8,6 +8,11 @@ CONDA_ENV="$4"
 EXPECTED_GPU="$5"
 shift 5
 
+# Shared project folder: keep everything this job writes readable/writable by the group.
+# (tempfile.mkstemp in save_json_atomic creates 0600 files, which umask alone does not fix.)
+umask 002
+trap 'find "$OUTPUT_DIR" -user "$USER" \( -type f -o -type d \) ! -perm -g+r -exec chmod g+rwX {} + 2>/dev/null || true' EXIT
+
 module purge
 module load conda
 eval "$(conda shell.bash hook)"
