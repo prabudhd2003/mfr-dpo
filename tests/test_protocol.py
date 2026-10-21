@@ -30,6 +30,10 @@ def test_protocol_uses_exact_ten_percent_replay():
     assert "mfr_dapr" in protocol["secondary_methods"]
     assert method_anchor_strength(protocol, "mfr_dapr") == 0.01
     assert method_old_per_step(protocol, "mfr_dapr") == 2
+    for method in ("mfr_dapr_a007","dapr_a007"):
+        assert method in protocol["secondary_methods"]
+        assert method_anchor_strength(protocol, method) == 0.007
+        assert method_old_per_step(protocol, method) == 2
     assert method_old_per_step(protocol, "ewc_100") == 0
     assert method_old_per_step(protocol, "ewc_1000") == 0
     assert method_old_per_step(protocol, "ewc_10000") == 0

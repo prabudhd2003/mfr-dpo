@@ -19,7 +19,7 @@ from mfr_utils import pin_chat_template_date
 
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 ANCHOR_METHODS = (
-    "dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted","mfr_dapr",
+    "dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted","mfr_dapr","mfr_dapr_a007","dapr_a007",
 )
 EWC_METHODS = ("ewc_100", "ewc_1000", "ewc_10000")
 # Diagnostics that describe the anchors actually applied. They are averaged over anchored

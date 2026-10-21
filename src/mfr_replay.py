@@ -21,6 +21,8 @@ The methods differ in which stored pairs fill the replay slots of each training 
     dapr_c          DAPR with common-shift-centred token anchoring
     mfr_dapr        MFR's largest frop selection plus DAPR's weak directioanl anchor
     mir_dpo         largest one-step increase in old-pair DPO loss (MIR adapted to DPO)
+    mfr_dapr_a007   mfr_dapr with anchor strength 0.007
+    dapr_a007       dapr_weak with anchor strength 0.007
     copr_adapted    lowest-margin replay plus a peak pair-distribution constraint
     ewc_100         no replay; LoRA-EWC parameter regularization with coefficient 100
     ewc_1000        no replay; LoRA-EWC parameter regularization with coefficient 1,000
@@ -38,12 +40,12 @@ from mfr_utils import buffer_seed
 METHODS = (
     "none", "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr",
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
-    "ewc_100", "ewc_1000", "ewc_10000", "mfr_balanced", "mfr_at_risk","mfr_dapr",
+    "ewc_100", "ewc_1000", "ewc_10000", "mfr_balanced", "mfr_at_risk","mfr_dapr","mfr_dapr_a007","dapr_a007"
 )
 REGULARIZATION_METHODS = ("ewc_100", "ewc_1000", "ewc_10000")
 REFRESH_METHODS = (
     "lowest_margin", "mfr", "fmcr", "cpmr", "dapr", "dapr_weak", "dapr_gated",
-    "dapr_c", "mir_dpo", "copr_adapted", "mfr_balanced", "mfr_at_risk", "mfr_dapr",
+    "dapr_c", "mir_dpo", "copr_adapted", "mfr_balanced", "mfr_at_risk", "mfr_dapr","mfr_dapr_a007","dapr_a007"
 )
 FORECAST_COLUMNS = [
     "previous_margin", "margin_velocity",
@@ -379,11 +381,11 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
         score = tiebreak
         order = np.argsort(tiebreak)                                     # a random permutation
     elif method in (
-        "lowest_margin", "dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted",
+        "lowest_margin", "dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted","dapr_a007"
     ):
         score = -rows["current_margin"].to_numpy()
         order = np.lexsort((tiebreak, rows["current_margin"].to_numpy()))          # ascending
-    else:  # mfr, mfr_dapr
+    else:  # mfr, mfr_dapr ,mfr_dapr_a007
         drop = (rows["peak_margin"] - rows["current_margin"]).to_numpy()
         score = drop
         order = np.lexsort((tiebreak, -drop))                                      # largest drop first

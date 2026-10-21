@@ -194,7 +194,11 @@ def main():
                       "lowest_margin_centered_directional_peak_token_anchor_v1"
                       if args.method == "dapr_c" else
                       "mfr_largest_drop_weak_directional_peak_token_anchor_v1"
-                      if args.method == "mfr_dapr" else None),
+                      if args.method == "mfr_dapr" else
+                      "mfr_largest_drop_matched_directional_peak_token_anchor_a007_v1"
+                      if args.method == "mfr_dapr_a007" else
+                      "lowest_margin_directional_peak_token_anchor_a007_v1"
+                      if args.method == "dapr_a007" else None),
         "mir_dpo_rule": ("one_incoming_step_dpo_loss_increase_v1"
                          if args.method == "mir_dpo" else None),
         "copr_adapted_rule": ("lowest_margin_peak_pair_distribution_mse_v1"

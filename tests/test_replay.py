@@ -101,7 +101,7 @@ def test_every_method_fills_exactly_the_slots():
     )
     for method in (
         "random", "random_high", "lowest_margin", "mfr", "cpmr", "dapr", "dapr_weak",
-        "dapr_gated", "dapr_c", "copr_adapted", "mfr_dapr",
+        "dapr_gated", "dapr_c", "copr_adapted", "mfr_dapr", "mfr_dapr_a007", "dapr_a007"
     ):
         plan = plan_interval(buffer, method, 24, np.random.default_rng(0))
         assert len(plan) == 24
@@ -214,6 +214,8 @@ def test_only_margin_based_methods_need_live_refreshes():
     assert mfr_replay.needs_refresh("mir_dpo")
     assert mfr_replay.needs_refresh("copr_adapted")
     assert mfr_replay.needs_refresh("mfr_dapr")
+    assert mfr_replay.needs_refresh("mfr_dapr_a007")
+    assert mfr_replay.needs_refresh("dapr_a007")
     assert not mfr_replay.needs_refresh("random")
     assert not mfr_replay.needs_refresh("random_high")
     assert not mfr_replay.needs_refresh("none")
@@ -563,3 +565,22 @@ def test_mfr_dapr_and_dapr_weak_differ_only_in_selection():
     mfr_dapr_pick = plan_interval(buffer, "mfr_dapr", 1, np.random.default_rng(0))
     assert dapr_pick == [never_learned]
     assert mfr_dapr_pick == [forgotten]
+
+
+
+def test_a007_methods_use_the_right_selection_rule():
+    """mfr_dapr_a007 must pick exactly like MFR; dapr_a007 exactly like Lowest margin."""
+    buffer = filled_buffer(size=50, two_stages=True)
+    rows = buffer.rows()
+    current = rows["peak_margin"].copy()
+    current.iloc[[2, 9, 17, 30, 41]] -= 1.0
+    buffer.set_current(pd.Series(current.values, index=rows["id"].values))
+    for cap in (None, 0.75):
+        for seed in range(5):
+            def ids(method):
+                return mfr_replay.plan_interval_details(
+                    buffer, method, 24, np.random.default_rng(seed), cap)["id"].tolist()
+
+            assert ids("mfr_dapr_a007") == ids("mfr")
+            assert ids("dapr_a007") == ids("lowest_margin")
+            assert ids("mfr_dapr_a007") != ids("dapr_a007")

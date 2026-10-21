@@ -11,7 +11,7 @@ import mfr_dpo
 
 
 def test_anchor_method_registry_includes_both_new_variants():
-    assert {"dapr_weak", "dapr_gated", "mfr_dapr"} <= set(mfr_dpo.ANCHOR_METHODS)
+    assert {"dapr_weak", "dapr_gated", "mfr_dapr", "mfr_dapr_a007", "dapr_a007"} <= set(mfr_dpo.ANCHOR_METHODS)
 
 
 def test_live_gate_uses_strict_reference_relative_margin_regression():
