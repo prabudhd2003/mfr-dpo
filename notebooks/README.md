@@ -4,6 +4,7 @@ The active workflow runs training through CARC terminal jobs, not notebooks.
 
 - `01_carc_status.ipynb` checks the local data, reference cache, and completed CARC runs.
 - `07_compare_runs.ipynb` builds the validation tables and figures from the CARC artifact directory.
+- `08_mid_term_results.ipynb` produces every table, figure, and quoted number for the midterm report, including DAPR-weak from the extended folder and joint training. Outputs go to `artifacts/analysis/midterm/` (also zipped).
 - `colab/` preserves the previous Colab notebooks and their outputs. They are historical and should not be used to launch the new experiment grid.
 
 Before opening an active notebook on CARC, set the artifact directory in the terminal that starts Jupyter:
