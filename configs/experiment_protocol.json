@@ -11,7 +11,7 @@
     "4": ["quality", "safe", "helpful"]
   },
   "methods": ["none", "random", "mfr"],
-  "secondary_methods": ["random_high", "lowest_margin"],
+  "secondary_methods": ["random_high", "lowest_margin", "dapr_weak", "mfr_at_risk", "mfr_balanced"],
   "seeds": [0, 1],
   "train_pairs": 2000,
   "val_pairs": 200,
