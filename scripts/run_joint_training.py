@@ -33,10 +33,6 @@ def parse_args():
     )
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--reference-cache", required=True)
-    parser.add_argument(
-        "--protocol", default=str(ROOT / "configs" / "experiment_protocol.json"),
-        help="Authoritative protocol JSON (default: primary Qwen protocol)",
-    )
     return parser.parse_args()
 
 
@@ -64,7 +60,7 @@ def score_validation(model, tokenizer, splits, stage, trained_on, run_meta, fold
 
 def main():
     args = parse_args()
-    protocol = load_protocol(args.protocol)
+    protocol = load_protocol(ROOT / "configs" / "experiment_protocol.json")
     joint_seeds = protocol["joint_seeds"]
     if args.seed not in joint_seeds:
         raise ValueError(f"joint seed {args.seed} is not configured; choose one of {joint_seeds}")

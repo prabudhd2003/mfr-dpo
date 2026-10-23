@@ -14,9 +14,3 @@ artifacts/
 *.pt
 *.pth
 .env
-
-# Slurm logs written into the repo (an untracked file makes the checkout "dirty" and blocks new runs)
-*.out
-slurm-*.out
-# Second-model artifacts live inside the repo folder on CARC
-artifacts_*/

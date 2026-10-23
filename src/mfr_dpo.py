@@ -15,8 +15,6 @@ from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_t
 from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, get_linear_schedule_with_warmup
 
-from mfr_utils import pin_chat_template_date
-
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 ANCHOR_METHODS = (
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted",
@@ -33,7 +31,6 @@ def load_model(model_name=MODEL_NAME, lora_r=16, adapter_path=None, revision=Non
                lora_alpha=None, lora_dropout=0.05):
     """Load the frozen 4-bit base model and either a fresh or saved LoRA adapter."""
     tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision)
-    pin_chat_template_date(tokenizer)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     compute_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
@@ -782,6 +779,7 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
                        max_tokens=1024, seed=0, max_share_per_dataset=None, score_batch_size=4,
                        desc="training", progress_path=None, save_every=25, reference_cache=None,
                        fmcr_velocity_decay=0.5, fmcr_forecast_horizon=1.0,
+                       mfr_softmax_temperature=1.0,
                        anchors=None, anchor_strength=0.1, huber_delta=1.0,
                        mir_lookahead_steps=1, ewc_states=None, ewc_coefficient=0.0):
     """Train once over new data with auditable replay; default batches are exactly 90/10 new/old."""
@@ -862,7 +860,7 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
             # velocities at each task boundary so a trend from the previous task is never projected
             # into the new one. Other margin methods retain the original four-refresh schedule.
             should_score = (method not in ("cpmr", "mir_dpo") and mfr_replay.needs_refresh(method)
-                            and (step > 0 or method in ("fmcr", "mfr_at_risk")))
+                            and (step > 0 or method == "fmcr"))
             if should_score:
                 refresh_started = time.time()
                 scores = score_pairs(
@@ -897,14 +895,12 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
                         scores, velocity_decay=fmcr_velocity_decay, initialize=(step == 0)
                     )
                 else:
-                    # At-Risk MFR also needs the absolute policy margin; it scores at step zero too,
-                    # so borrowed Stage-1 buffers without policy margins are filled before planning.
-                    buffer.set_current(scores["margin"], policy_margin=(
-                        scores["policy_margin"] if method == "mfr_at_risk" else None))
+                    buffer.set_current(scores["margin"])
                 scoring_seconds += time.time() - refresh_started
             plan = mfr_replay.plan_interval_details(
                 buffer, method, interval_len * old_per_step, rng, max_share_per_dataset,
                 plan_index=interval, forecast_horizon=fmcr_forecast_horizon,
+                mfr_softmax_temperature=mfr_softmax_temperature,
             )
             if method == "fmcr" and progress_path:
                 refresh_path = Path(progress_path).parent / f"fmcr_refresh_{interval + 1}.csv"
@@ -914,12 +910,6 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
                 buffer.rows().to_csv(refresh_path, index=False)
             if method == "mir_dpo" and progress_path:
                 refresh_path = Path(progress_path).parent / f"mir_dpo_refresh_{interval + 1}.csv"
-                buffer.rows().to_csv(refresh_path, index=False)
-            if (progress_path and mfr_replay.needs_refresh(method)
-                    and method not in ("fmcr", "cpmr", "mir_dpo")):
-                # Full-buffer snapshot at every refresh (logging only): lets the analysis
-                # test whether a selection score predicts the next interval's margin drop.
-                refresh_path = Path(progress_path).parent / f"buffer_refresh_{interval + 1}.csv"
                 buffer.rows().to_csv(refresh_path, index=False)
             plan_at = 0
 
@@ -977,7 +967,9 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
     elapsed = (time.time() - started) / 60
     print(f"Done: {len(rows)} new + {len(replay_log)} replayed in {elapsed:.1f} min "
           f"({scoring_seconds / 60:.1f} min scoring), peak {_peak_gb():.1f} GB")
-    columns = ["step", "interval", *mfr_replay.PLAN_COLUMNS]
+    columns = ["step", "interval", *(
+        mfr_replay.SOFTMAX_PLAN_COLUMNS if method == "mfr_softmax" else mfr_replay.PLAN_COLUMNS
+    )]
     if replay_log:
         replay_frame = pd.DataFrame(replay_log)
     else:

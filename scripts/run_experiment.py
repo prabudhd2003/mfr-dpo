@@ -15,7 +15,7 @@ import mfr_cache
 import mfr_data
 import mfr_dpo
 from mfr_replay import METHODS as IMPLEMENTED_METHODS, ReplayBuffer
-from mfr_utils import (allowed_seeds, file_sha256, load_protocol, mark_run_complete, method_anchor_strength,
+from mfr_utils import (file_sha256, load_protocol, mark_run_complete, method_anchor_strength,
                        method_ewc_coefficient, method_old_per_step, run_info, save_json_atomic,
                        seed_everything, stage_seed,
                        stage1_compatibility_sha256,
@@ -34,10 +34,6 @@ def parse_args():
     parser.add_argument("--start-stage", type=int, default=1)
     parser.add_argument("--stage1-from", help="Compatible completed run directory whose stage 1 should be reused")
     parser.add_argument("--reference-cache", help="Optional CSV made by build_reference_cache.py")
-    parser.add_argument(
-        "--protocol", default=str(ROOT / "configs" / "experiment_protocol.json"),
-        help="Authoritative protocol JSON (default: primary Qwen protocol)",
-    )
     return parser.parse_args()
 
 
@@ -98,8 +94,7 @@ def update_buffer(model, tokenizer, buffer, stage, dataset, train_df, stage_dir,
                 all_scores, velocity_decay=protocol["fmcr_velocity_decay"], initialize=False
             )
         else:
-            buffer.set_current(current_scores["margin"], policy_margin=(
-                current_scores["policy_margin"] if method == "mfr_at_risk" else None))
+            buffer.set_current(current_scores["margin"])
     buffer.to_csv(stage_dir / "buffer.csv")
     if method in mfr_dpo.ANCHOR_METHODS:
         kept = set(buffer.rows()["id"])
@@ -112,7 +107,7 @@ def update_buffer(model, tokenizer, buffer, stage, dataset, train_df, stage_dir,
 
 def main():
     args = parse_args()
-    protocol = load_protocol(args.protocol)
+    protocol = load_protocol(ROOT / "configs" / "experiment_protocol.json")
     order_key = str(args.order)
     if order_key not in protocol["orders"]:
         choices = ", ".join(sorted(protocol["orders"], key=int))
@@ -126,10 +121,9 @@ def main():
         raise ValueError(
             f"method {args.method!r} is configured but not implemented in src/mfr_replay.py"
         )
-    if args.seed not in allowed_seeds(protocol, args.method):
+    if args.seed not in protocol.get("seeds", []):
         raise ValueError(
-            f"seed {args.seed} is not allowed for {args.method}; "
-            f"choose one of {allowed_seeds(protocol, args.method)}"
+            f"seed {args.seed} is not in the protocol; choose one of {protocol.get('seeds', [])}"
         )
     order = protocol["orders"][order_key]
     n_stages = len(order)
@@ -175,6 +169,7 @@ def main():
         "micro_batch": protocol["micro_batch"],
         "fmcr_velocity_decay": protocol["fmcr_velocity_decay"],
         "fmcr_forecast_horizon": protocol["fmcr_forecast_horizon"],
+        "mfr_softmax_temperature": protocol.get("mfr_softmax_temperature", 1.0),
         "anchor_strength": anchor_strength,
         "dapr_huber_delta": protocol["dapr_huber_delta"],
         "mir_lookahead_steps": protocol["mir_lookahead_steps"],
@@ -335,6 +330,7 @@ def main():
             reference_cache=reference_cache,
             fmcr_velocity_decay=protocol["fmcr_velocity_decay"],
             fmcr_forecast_horizon=protocol["fmcr_forecast_horizon"],
+            mfr_softmax_temperature=protocol.get("mfr_softmax_temperature", 1.0),
             anchors=anchors, anchor_strength=anchor_strength,
             huber_delta=protocol["dapr_huber_delta"],
             mir_lookahead_steps=protocol["mir_lookahead_steps"],

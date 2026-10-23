@@ -55,9 +55,7 @@ def generate_responses(model, tokenizer, prompts, batch_size=4, max_new_tokens=5
     ):
         chunk = rows[start:start + batch_size]
         rendered = [chat_prompt(tokenizer, row["prompt"]) for row in chunk]
-        # The chat template already holds any BOS token; training also tokenized without one.
-        inputs = tokenizer(rendered, return_tensors="pt", padding=True,
-                           add_special_tokens=False).to(model.device)
+        inputs = tokenizer(rendered, return_tensors="pt", padding=True).to(model.device)
         generated = model.generate(
             **inputs, max_new_tokens=max_new_tokens, do_sample=do_sample,
             pad_token_id=tokenizer.pad_token_id, eos_token_id=tokenizer.eos_token_id,

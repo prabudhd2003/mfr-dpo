@@ -13,6 +13,7 @@ The methods differ in which stored pairs fill the replay slots of each training 
     random_high     uniform sample from the buffer with a larger budget set by the runner
     lowest_margin   the lowest current_margin (hard pairs, forgotten or not)
     mfr             the largest drop, peak_margin - current_margin (our method)
+    mfr_softmax     seeded categorical sampling from softmax(forgetting / temperature)
     fmcr            pairs forecast to cross a preference boundary before the next refresh
     cpmr            the lowest projected margin after a counterfactual new-task update interval
     dapr            lowest-margin replay plus directional peak-token anchoring
@@ -35,14 +36,14 @@ import pandas as pd
 from mfr_utils import buffer_seed
 
 METHODS = (
-    "none", "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr",
+    "none", "random", "random_high", "lowest_margin", "mfr", "mfr_softmax", "fmcr", "cpmr",
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
-    "ewc_100", "ewc_1000", "ewc_10000", "mfr_balanced", "mfr_at_risk",
+    "ewc_100", "ewc_1000", "ewc_10000",
 )
 REGULARIZATION_METHODS = ("ewc_100", "ewc_1000", "ewc_10000")
 REFRESH_METHODS = (
-    "lowest_margin", "mfr", "fmcr", "cpmr", "dapr", "dapr_weak", "dapr_gated",
-    "dapr_c", "mir_dpo", "copr_adapted", "mfr_balanced", "mfr_at_risk",
+    "lowest_margin", "mfr", "mfr_softmax", "fmcr", "cpmr", "dapr", "dapr_weak", "dapr_gated",
+    "dapr_c", "mir_dpo", "copr_adapted",
 )
 FORECAST_COLUMNS = [
     "previous_margin", "margin_velocity",
@@ -58,6 +59,9 @@ EXTRA_COLUMNS = [
     *MIR_COLUMNS,
 ]
 PLAN_COLUMNS = ["id", "dataset", "selection_score", "selection_rank", "method"]
+SOFTMAX_PLAN_COLUMNS = [
+    *PLAN_COLUMNS, "softmax_probability", "selection_probability", "temperature",
+]
 FMCR_PLAN_COLUMNS = [
     *PLAN_COLUMNS, "risk_tier", "risk_label", "historical_drop",
     "current_margin", "current_policy_margin", "margin_velocity", "policy_velocity",
@@ -66,11 +70,6 @@ FMCR_PLAN_COLUMNS = [
 CPMR_PLAN_COLUMNS = [
     *PLAN_COLUMNS, "current_margin", "projected_margin", "worst_case_margin",
     "predicted_drop", "historical_drop",
-]
-BALANCED_PLAN_COLUMNS = [*PLAN_COLUMNS, "historical_drop", "current_margin", "dataset_quota"]
-AT_RISK_PLAN_COLUMNS = [
-    *PLAN_COLUMNS, "risk_tier", "historical_drop", "current_margin", "current_policy_margin",
-    "dataset_quota",
 ]
 MIR_PLAN_COLUMNS = [
     *PLAN_COLUMNS, "current_margin", "current_margin_sum", "projected_margin_sum",
@@ -176,19 +175,11 @@ class ReplayBuffer:
         by_id = self._rows.set_index("id")
         return [{"id": pair_id, **by_id.loc[pair_id].to_dict()} for pair_id in ids]
 
-    def set_current(self, margin, policy_margin=None):
-        """Update current margins from a fresh scoring pass (Series indexed by pair id).
-
-        policy_margin (optional, At-Risk MFR) also updates the absolute policy margin. Pairs not in
-        the scoring pass keep their stored values, exactly like the relative margin.
-        """
+    def set_current(self, margin):
+        """Update current margins from a fresh scoring pass (Series indexed by pair id)."""
         updated = self._rows["id"].map(margin)
         self._rows["previous_margin"] = self._rows["current_margin"].astype(float)
         self._rows["current_margin"] = updated.fillna(self._rows["current_margin"]).astype(float)
-        if policy_margin is not None:
-            policy = self._rows["id"].map(policy_margin)
-            self._rows["current_policy_margin"] = (
-                policy.fillna(self._rows["current_policy_margin"]).astype(float))
 
     def set_forecast_scores(self, scores, velocity_decay=0.5, initialize=False):
         """Update both margin trajectories used by FMCR.
@@ -329,7 +320,7 @@ class ReplayBuffer:
 # -------------------------------------------------------------------- choosing
 
 def plan_interval(buffer, method, n_slots, rng, max_share_per_dataset=None,
-                  plan_index=0, forecast_horizon=1.0):
+                  plan_index=0, forecast_horizon=1.0, mfr_softmax_temperature=1.0):
     """Pair ids for the next interval's replay slots (one id per slot, in order).
 
     none: empty list. random/random_high: uniform without replacement. lowest_margin: lowest current margin.
@@ -340,21 +331,22 @@ def plan_interval(buffer, method, n_slots, rng, max_share_per_dataset=None,
     details = plan_interval_details(
         buffer, method, n_slots, rng, max_share_per_dataset,
         plan_index=plan_index, forecast_horizon=forecast_horizon,
+        mfr_softmax_temperature=mfr_softmax_temperature,
     )
     return details["id"].tolist() if len(details) else []
 
 
 def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=None,
-                          plan_index=0, forecast_horizon=1.0):
+                          plan_index=0, forecast_horizon=1.0,
+                          mfr_softmax_temperature=1.0):
     """Return the replay plan with auditable rank, score, dataset, and selection rule."""
     if method not in METHODS:
         raise ValueError(f"unknown replay method {method!r}; expected one of {METHODS}")
     if not uses_replay(method) or buffer is None or len(buffer) == 0 or n_slots <= 0:
-        columns = (FMCR_PLAN_COLUMNS if method == "fmcr" else
+        columns = (SOFTMAX_PLAN_COLUMNS if method == "mfr_softmax" else
+                   FMCR_PLAN_COLUMNS if method == "fmcr" else
                    CPMR_PLAN_COLUMNS if method == "cpmr" else
-                   MIR_PLAN_COLUMNS if method == "mir_dpo" else
-                   BALANCED_PLAN_COLUMNS if method == "mfr_balanced" else
-                   AT_RISK_PLAN_COLUMNS if method == "mfr_at_risk" else PLAN_COLUMNS)
+                   MIR_PLAN_COLUMNS if method == "mir_dpo" else PLAN_COLUMNS)
         return pd.DataFrame(columns=columns)
 
     rows = buffer.rows()
@@ -369,10 +361,10 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
         return _plan_cpmr(rows, n_slots, tiebreak, max_share_per_dataset)
     if method == "mir_dpo":
         return _plan_mir_dpo(rows, n_slots, tiebreak, max_share_per_dataset)
-    if method == "mfr_balanced":
-        return _plan_mfr_balanced(rows, n_slots, tiebreak, plan_index=int(plan_index))
-    if method == "mfr_at_risk":
-        return _plan_mfr_at_risk(rows, n_slots, tiebreak, plan_index=int(plan_index))
+    if method == "mfr_softmax":
+        return _plan_mfr_softmax(
+            rows, n_slots, rng, float(mfr_softmax_temperature), max_share_per_dataset
+        )
 
     if method in ("random", "random_high"):
         score = tiebreak
@@ -399,61 +391,60 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
     return selected[PLAN_COLUMNS]
 
 
-def _quota_plan(rows, ranked, n_slots, plan_index, method, columns):
-    """Equal replay quota per old behavior (docs/BALANCED_MFR.md).
+def _plan_mfr_softmax(rows, n_slots, rng, temperature=1.0, max_share_per_dataset=None):
+    """Sample replay occurrences from a softmax over historical forgetting scores.
 
-    ``ranked`` is the buffer in priority order. Each behavior takes its top pairs up to its quota and
-    cycles only after all of its pairs are used. When the slots do not divide evenly, the extra
-    slots go to the first behaviors of a list rotated by ``plan_index``, so no behavior is always
-    favored. Selections are interleaved round-robin so every optimizer step stays balanced.
+    Sampling is categorical with replacement, matching token sampling: a highly forgotten pair is
+    more likely, but lower-scoring pairs retain non-zero probability. Subtracting the maximum logit
+    makes the softmax numerically stable. ``selection_probability`` records the conditional
+    probability used for that draw; it can differ from ``softmax_probability`` when a dataset cap
+    temporarily masks candidates.
     """
-    datasets = list(dict.fromkeys(rows["dataset"]))
-    base, remainder = divmod(int(n_slots), len(datasets))
-    shift = int(plan_index) % len(datasets)
-    rotated = datasets[shift:] + datasets[:shift]
-    quotas = {dataset: base + (index < remainder) for index, dataset in enumerate(rotated)}
-    chosen = {}
-    for dataset in datasets:
-        part = ranked[ranked["dataset"] == dataset].copy().reset_index(drop=True)
-        part["selection_rank"] = np.arange(1, len(part) + 1)
-        part["dataset_quota"] = int(quotas[dataset])
-        chosen[dataset] = [part.iloc[i % len(part)].copy() for i in range(quotas[dataset])]
-    interleaved = [chosen[dataset][position]
-                   for position in range(max(quotas.values()))
-                   for dataset in rotated if position < len(chosen[dataset])]
-    selected = pd.DataFrame(interleaved).reset_index(drop=True)
-    selected["method"] = method
-    return selected[columns]
+    if not np.isfinite(temperature) or temperature <= 0:
+        raise ValueError("mfr_softmax_temperature must be a finite positive number")
 
+    work = rows.copy().reset_index(drop=True)
+    forgetting = (work["peak_margin"] - work["current_margin"]).to_numpy(dtype=float)
+    if not np.isfinite(forgetting).all():
+        raise ValueError("mfr_softmax requires finite peak and current margins")
+    logits = forgetting / temperature
+    weights = np.exp(logits - logits.max())
+    probabilities = weights / weights.sum()
+    # Rank is descriptive only; it does not determine selection.
+    rank_order = np.argsort(-forgetting, kind="stable")
+    ranks = np.empty(len(work), dtype=int)
+    ranks[rank_order] = np.arange(1, len(work) + 1)
+    work["selection_score"] = forgetting
+    work["selection_rank"] = ranks
+    work["softmax_probability"] = probabilities
+    work["temperature"] = temperature
 
-def _plan_mfr_balanced(rows, n_slots, tiebreak, plan_index=0):
-    """Balanced MFR: MFR's historical-drop ranking with equal quotas per old behavior."""
-    work = rows.copy()
-    work["historical_drop"] = work["peak_margin"] - work["current_margin"]
-    order = np.lexsort((tiebreak, -work["historical_drop"].to_numpy()))
-    ranked = work.iloc[order].copy()
-    ranked["selection_score"] = ranked["historical_drop"]
-    return _quota_plan(rows, ranked, n_slots, plan_index, "mfr_balanced", BALANCED_PLAN_COLUMNS)
+    cap = None
+    if max_share_per_dataset is not None:
+        cap = max(1, int(np.floor(float(max_share_per_dataset) * n_slots)))
+    counts = {}
+    selected = []
+    for _ in range(n_slots):
+        allowed = np.ones(len(work), dtype=bool)
+        if cap is not None:
+            allowed = np.array([
+                counts.get(dataset, 0) < cap for dataset in work["dataset"]
+            ], dtype=bool)
+            # A cap cannot be enforced when every represented dataset has reached it.
+            if not allowed.any():
+                allowed[:] = True
+        draw_weights = probabilities * allowed
+        draw_probabilities = draw_weights / draw_weights.sum()
+        index = int(rng.choice(len(work), p=draw_probabilities))
+        choice = work.iloc[index].copy()
+        choice["selection_probability"] = float(draw_probabilities[index])
+        selected.append(choice)
+        dataset = choice["dataset"]
+        counts[dataset] = counts.get(dataset, 0) + 1
 
-
-def _plan_mfr_at_risk(rows, n_slots, tiebreak, plan_index=0):
-    """At-Risk MFR: Balanced MFR, but pairs the policy currently gets wrong come first.
-
-    Tier 0: current_policy_margin <= 0 (the tuned policy no longer prefers the chosen answer).
-    Tier 1: everything else. Within a tier, largest historical relative-margin drop first. Zero is
-    the only threshold, so nothing is tuned. A relative margin <= 0 alone does not put a pair in
-    tier 0.
-    """
-    if "current_policy_margin" not in rows or rows["current_policy_margin"].isna().any():
-        raise ValueError("At-Risk MFR needs a current policy margin for every buffered pair; "
-                         "score the buffer before planning")
-    work = rows.copy()
-    work["historical_drop"] = work["peak_margin"] - work["current_margin"]
-    work["risk_tier"] = np.where(work["current_policy_margin"] <= 0, 0, 1).astype(int)
-    order = np.lexsort((tiebreak, -work["historical_drop"].to_numpy(), work["risk_tier"].to_numpy()))
-    ranked = work.iloc[order].copy()
-    ranked["selection_score"] = ranked["historical_drop"]
-    return _quota_plan(rows, ranked, n_slots, plan_index, "mfr_at_risk", AT_RISK_PLAN_COLUMNS)
+    result = pd.DataFrame(selected).reset_index(drop=True)
+    result["method"] = "mfr_softmax"
+    return result[SOFTMAX_PLAN_COLUMNS]
 
 
 def _plan_mir_dpo(rows, n_slots, tiebreak, max_share_per_dataset=None):

@@ -8,9 +8,7 @@
     "1": ["helpful", "safe", "quality"],
     "2": ["safe", "helpful", "quality"],
     "3": ["quality", "helpful", "safe"],
-    "4": ["quality", "safe", "helpful"],
-    "5": ["helpful", "quality", "safe"],
-    "6": ["safe", "quality", "helpful"]
+    "4": ["quality", "safe", "helpful"]
   },
   "methods": ["none", "random", "mfr"],
   "secondary_methods": [
@@ -27,12 +25,9 @@
     "ewc_100",
     "ewc_1000",
     "ewc_10000",
-    "mfr_balanced",
-    "mfr_at_risk"
+    "mfr_softmax"
   ],
-  "seeds": [0, 1, 2, 3, 4],
-  "extension_seeds": [5, 6, 7, 8, 9],
-  "extension_methods": ["none", "random", "lowest_margin", "dapr_weak"],
+  "seeds": [0, 1],
   "joint_seeds": [0, 1, 2, 3, 4],
   "train_pairs": 2000,
   "val_pairs": 200,
@@ -79,5 +74,6 @@
     "do_sample": false,
     "max_new_tokens": 512,
     "batch_size": 4
-  }
+  },
+  "mfr_softmax_temperature": 1.0
 }
