@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -14,6 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 import mfr_cache
 import mfr_data
 import mfr_dpo
+import mfr_pid
 from mfr_replay import METHODS as IMPLEMENTED_METHODS, ReplayBuffer
 from mfr_utils import (file_sha256, load_protocol, mark_run_complete, method_old_per_step,
                        run_info, save_json_atomic, seed_everything, stage_seed,
@@ -61,7 +63,8 @@ def score_sets(model, tokenizer, splits, stage, trained_on, run_meta, run_dir, p
     return pd.DataFrame(rows)
 
 
-def update_buffer(model, tokenizer, buffer, stage, dataset, train_df, stage_dir, protocol, reference_cache):
+def update_buffer(model, tokenizer, buffer, stage, dataset, train_df, stage_dir, protocol, reference_cache,
+                  method="none"):
     candidates = buffer.candidates(dataset, train_df)
     peak = mfr_dpo.score_pairs(
         model, tokenizer, candidates, beta=protocol["beta"], max_tokens=protocol["max_tokens"],
@@ -74,7 +77,15 @@ def update_buffer(model, tokenizer, buffer, stage, dataset, train_df, stage_dir,
             model, tokenizer, older_rows, beta=protocol["beta"], max_tokens=protocol["max_tokens"],
             reference_cache=reference_cache, desc=f"stage {stage}: older buffer state"
         )["margin"]
-        buffer.set_current(current)
+        # Consume the final window exactly once at the stage boundary. The next
+        # stage's initial plan reads this saved state without integrating again.
+        pid_dt = None
+        if mfr_pid.is_pid(method):
+            n_steps = math.ceil(len(train_df) / protocol["new_per_step"])
+            window_steps = max(1, math.ceil(n_steps / max(1, protocol["refreshes"])))
+            last_steps = n_steps - ((n_steps - 1) // window_steps) * window_steps
+            pid_dt = last_steps / window_steps
+        buffer.set_current(current, pid_dt=pid_dt)
     buffer.to_csv(stage_dir / "buffer.csv")
     return buffer
 
@@ -138,6 +149,8 @@ def main():
         "stage1_run_name": Path(args.stage1_from).name if args.stage1_from else None,
         "lora_r": protocol["lora_r"], "lora_alpha": protocol["lora_alpha"],
         "lora_dropout": protocol["lora_dropout"], "epochs": protocol["epochs"],
+        "max_share_per_dataset": protocol["max_share_per_dataset"],
+        "pid_profile": mfr_pid.PROFILES.get(args.method),
     }
     current_info = run_info(ROOT)
     if current_info.get("git_dirty"):
@@ -237,6 +250,7 @@ def main():
             max_share_per_dataset=protocol["max_share_per_dataset"],
             desc=f"stage {stage}: {dataset}", progress_path=stage_dir / "history.csv",
             reference_cache=reference_cache,
+            pid_trace_path=stage_dir / "pid_trace.csv" if mfr_pid.is_pid(args.method) else None,
         )
         model.save_pretrained(stage_dir)
         print(f"Stage {stage}/{n_stages} training saved; scoring validation sets...", flush=True)
@@ -246,12 +260,13 @@ def main():
             model, tokenizer, splits, stage, dataset, run_meta, run_dir, protocol, reference_cache
         )
         results = pd.concat([results, stage_results], ignore_index=True)
-        results.to_csv(run_dir / "results.csv", index=False)
         if stage < len(order):
             buffer = update_buffer(
                 model, tokenizer, buffer, stage, dataset, splits[dataset]["train"], stage_dir,
-                protocol, reference_cache,
+                protocol, reference_cache, method=args.method,
             )
+        # Publish a finished stage only after its replay/controller state exists.
+        results.to_csv(run_dir / "results.csv", index=False)
 
     expected = [run_dir / "settings.json", run_dir / "results.csv"] + [
         run_dir / f"stage{stage}_{dataset}" / "history.csv" for stage, dataset in enumerate(order, 1)

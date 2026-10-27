@@ -1,4 +1,4 @@
-"""The replay memory and the four ways to fill the replay slots.
+"""Replay memory, original selectors, and PID-inspired gain profiles.
 
 The buffer holds `size` old preference pairs (500 by default), split evenly across the stages
 already learned. For every stored pair we keep:
@@ -13,18 +13,20 @@ The methods differ in which stored pairs fill the replay slots of each training 
     random_high     uniform sample from the buffer with a larger budget set by the runner
     lowest_margin   the lowest current_margin (hard pairs, forgotten or not)
     mfr             the largest drop, peak_margin - current_margin (our method)
+    pid_*           fixed-anchor error plus the configured integral and derivative terms
 
 Everything here is CPU-only and fully seeded: which pairs enter the buffer depends on the run seed
-and the dataset, never on the method, so all four methods store exactly the same pairs.
+and the dataset, never on the method, so all methods store exactly the same pairs.
 """
 
 import numpy as np
 import pandas as pd
 
 from mfr_utils import buffer_seed
+from mfr_pid import PROFILES, LOG_COLUMNS, components, ensure_state, is_pid, update_state
 
-METHODS = ("none", "random", "random_high", "lowest_margin", "mfr")
-REFRESH_METHODS = ("lowest_margin", "mfr")
+METHODS = ("none", "random", "random_high", "lowest_margin", "mfr", *PROFILES)
+REFRESH_METHODS = ("lowest_margin", "mfr", *PROFILES)
 EXTRA_COLUMNS = ["dataset", "peak_margin", "current_margin"]
 
 
@@ -69,6 +71,7 @@ class ReplayBuffer:
             missing = new.loc[new["peak_margin"].isna(), "id"].tolist()[:3]
             raise ValueError(f"peak margins missing for {missing} ...")
         new["current_margin"] = new["peak_margin"]
+        new = ensure_state(new)
 
         self._rows = pd.concat([self._rows, new], ignore_index=True) if len(self._rows) else new
         self._rebalance()
@@ -100,8 +103,11 @@ class ReplayBuffer:
         by_id = self._rows.set_index("id")
         return [{"id": pair_id, **by_id.loc[pair_id].to_dict()} for pair_id in ids]
 
-    def set_current(self, margin):
+    def set_current(self, margin, pid_dt=None):
         """Update current margins from a fresh scoring pass (Series indexed by pair id)."""
+        if pid_dt is not None:
+            self._rows = update_state(self._rows, margin, pid_dt)
+            return
         updated = self._rows["id"].map(margin)
         self._rows["current_margin"] = updated.fillna(self._rows["current_margin"]).astype(float)
 
@@ -154,6 +160,10 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
     elif method == "lowest_margin":
         score = -rows["current_margin"].to_numpy()
         order = np.lexsort((tiebreak, rows["current_margin"].to_numpy()))          # ascending
+    elif is_pid(method):
+        rows = components(rows, method)
+        score = rows["selection_score"].to_numpy()
+        order = np.lexsort((tiebreak, -score))
     else:  # mfr
         drop = (rows["peak_margin"] - rows["current_margin"]).to_numpy()
         score = drop
@@ -168,7 +178,10 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
     repeats = [ranked.iloc[i % len(ranked)].copy() for i in range(n_slots)]
     selected = pd.DataFrame(repeats).reset_index(drop=True)
     selected["method"] = method
-    return selected[["id", "dataset", "selection_score", "selection_rank", "method"]]
+    columns = ["id", "dataset", "selection_score", "selection_rank", "method"]
+    if is_pid(method):
+        columns += list(LOG_COLUMNS)
+    return selected[columns]
 
 
 def diagnostics(buffer):

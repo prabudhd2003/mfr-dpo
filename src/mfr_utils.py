@@ -16,8 +16,10 @@ SCIENTIFIC_CODE_PATHS = (
     "src/mfr_cache.py",
     "src/mfr_data.py",
     "src/mfr_dpo.py",
+    "src/mfr_pid.py",
     "src/mfr_replay.py",
     "src/mfr_utils.py",
+    "configs/experiment_protocol.json",
 )
 
 
@@ -143,7 +145,8 @@ def validate_resume_settings(settings, saved):
     keys = ("run_name", "order_id", "order", "method", "seed", "protocol_version", "data_version",
             "data_manifest_sha256", "model_name", "model_revision", "lr", "beta", "new_per_step",
             "old_per_step", "max_tokens", "buffer_size", "refreshes", "lora_r", "lora_alpha",
-            "lora_dropout", "epochs", "stage1_run_name", "scientific_code_sha256")
+            "lora_dropout", "epochs", "stage1_run_name", "scientific_code_sha256",
+            "max_share_per_dataset", "pid_profile")
     mismatches = {key: (settings.get(key), saved.get(key))
                   for key in keys if settings.get(key) != saved.get(key)}
     if mismatches:

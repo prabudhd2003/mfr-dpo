@@ -247,9 +247,11 @@ def train_stage(model, tokenizer, df, beta=0.1, lr=1e-4, pairs_per_step=18, micr
 def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.1, lr=1e-4,
                        new_per_step=18, old_per_step=2, refreshes=5, micro_batch=2,
                        max_tokens=1024, seed=0, max_share_per_dataset=None, score_batch_size=4,
-                       desc="training", progress_path=None, save_every=25, reference_cache=None):
+                       desc="training", progress_path=None, save_every=25, reference_cache=None,
+                       pid_trace_path=None):
     """Train once over new data with auditable replay; default batches are exactly 90/10 new/old."""
     import mfr_replay
+    import mfr_pid
     from mfr_utils import seed_everything
 
     seed_everything(seed)
@@ -278,8 +280,14 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
                     model, tokenizer, buffer.rows(), beta=beta, batch_size=score_batch_size,
                     max_tokens=max_tokens, desc="refreshing buffer", reference_cache=reference_cache
                 )
-                buffer.set_current(scores["margin"])
+                buffer.set_current(scores["margin"], pid_dt=1.0 if mfr_pid.is_pid(method) else None)
                 scoring_seconds += time.time() - refresh_started
+            if mfr_pid.is_pid(method) and pid_trace_path is not None:
+                trace = mfr_pid.components(buffer.rows(), method)
+                trace = trace[["id", "dataset", "selection_score", *mfr_pid.LOG_COLUMNS]]
+                trace.insert(0, "interval", interval + 1)
+                trace.insert(0, "step", step + 1)
+                trace.to_csv(pid_trace_path, index=False, mode="w" if step == 0 else "a", header=step == 0)
             plan = mfr_replay.plan_interval_details(
                 buffer, method, interval_len * old_per_step, rng, max_share_per_dataset
             )
@@ -318,4 +326,6 @@ def train_stage_replay(model, tokenizer, df, buffer=None, method="none", beta=0.
     print(f"Done: {len(rows)} new + {len(replay_log)} replayed in {elapsed:.1f} min "
           f"({scoring_seconds / 60:.1f} min scoring), peak {_peak_gb():.1f} GB")
     columns = ["step", "interval", "id", "dataset", "selection_score", "selection_rank", "method"]
+    if mfr_pid.is_pid(method):
+        columns += list(mfr_pid.LOG_COLUMNS)
     return pd.DataFrame(history), pd.DataFrame(replay_log, columns=columns)

@@ -5,14 +5,59 @@
   "model_name": "Qwen/Qwen2.5-1.5B-Instruct",
   "model_revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
   "orders": {
-    "1": ["helpful", "safe", "quality"],
-    "2": ["safe", "helpful", "quality"],
-    "3": ["quality", "helpful", "safe"],
-    "4": ["quality", "safe", "helpful"]
+    "1": [
+      "helpful",
+      "safe",
+      "quality"
+    ],
+    "2": [
+      "safe",
+      "helpful",
+      "quality"
+    ],
+    "3": [
+      "quality",
+      "helpful",
+      "safe"
+    ],
+    "4": [
+      "quality",
+      "safe",
+      "helpful"
+    ]
   },
-  "methods": ["none", "random", "mfr"],
-  "secondary_methods": ["random_high", "lowest_margin", "dapr_weak", "mfr_at_risk", "mfr_balanced"],
-  "seeds": [0, 1],
+  "methods": [
+    "none",
+    "random",
+    "mfr"
+  ],
+  "secondary_methods": [
+    "random_high",
+    "lowest_margin",
+    "dapr_weak",
+    "mfr_at_risk",
+    "mfr_balanced",
+    "pid_i000_d000",
+    "pid_i000_d025",
+    "pid_i000_d050",
+    "pid_i000_d100",
+    "pid_i002_d000",
+    "pid_i002_d025",
+    "pid_i002_d050",
+    "pid_i002_d100",
+    "pid_i010_d000",
+    "pid_i010_d025",
+    "pid_i010_d050",
+    "pid_i010_d100",
+    "pid_i030_d000",
+    "pid_i030_d025",
+    "pid_i030_d050",
+    "pid_i030_d100"
+  ],
+  "seeds": [
+    0,
+    1
+  ],
   "train_pairs": 2000,
   "val_pairs": 200,
   "test_pairs": 300,
@@ -39,5 +84,87 @@
     "do_sample": false,
     "max_new_tokens": 512,
     "batch_size": 4
+  },
+  "pid_replay_profiles": {
+    "pid_i000_d000": {
+      "kp": 1.0,
+      "ki": 0.0,
+      "kd": 0.0
+    },
+    "pid_i000_d025": {
+      "kp": 1.0,
+      "ki": 0.0,
+      "kd": 0.25
+    },
+    "pid_i000_d050": {
+      "kp": 1.0,
+      "ki": 0.0,
+      "kd": 0.5
+    },
+    "pid_i000_d100": {
+      "kp": 1.0,
+      "ki": 0.0,
+      "kd": 1.0
+    },
+    "pid_i002_d000": {
+      "kp": 1.0,
+      "ki": 0.02,
+      "kd": 0.0
+    },
+    "pid_i002_d025": {
+      "kp": 1.0,
+      "ki": 0.02,
+      "kd": 0.25
+    },
+    "pid_i002_d050": {
+      "kp": 1.0,
+      "ki": 0.02,
+      "kd": 0.5
+    },
+    "pid_i002_d100": {
+      "kp": 1.0,
+      "ki": 0.02,
+      "kd": 1.0
+    },
+    "pid_i010_d000": {
+      "kp": 1.0,
+      "ki": 0.1,
+      "kd": 0.0
+    },
+    "pid_i010_d025": {
+      "kp": 1.0,
+      "ki": 0.1,
+      "kd": 0.25
+    },
+    "pid_i010_d050": {
+      "kp": 1.0,
+      "ki": 0.1,
+      "kd": 0.5
+    },
+    "pid_i010_d100": {
+      "kp": 1.0,
+      "ki": 0.1,
+      "kd": 1.0
+    },
+    "pid_i030_d000": {
+      "kp": 1.0,
+      "ki": 0.3,
+      "kd": 0.0
+    },
+    "pid_i030_d025": {
+      "kp": 1.0,
+      "ki": 0.3,
+      "kd": 0.25
+    },
+    "pid_i030_d050": {
+      "kp": 1.0,
+      "ki": 0.3,
+      "kd": 0.5
+    },
+    "pid_i030_d100": {
+      "kp": 1.0,
+      "ki": 0.3,
+      "kd": 1.0
+    }
   }
 }

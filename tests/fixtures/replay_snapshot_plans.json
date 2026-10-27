@@ -1,0 +1,2596 @@
+{
+  "none:None": [],
+  "none:0.75": [],
+  "random:None": [
+    {
+      "id": "helpful-023",
+      "dataset": "helpful",
+      "selection_score": 0.00282703218662,
+      "selection_rank": 1,
+      "method": "random"
+    },
+    {
+      "id": "helpful-097",
+      "dataset": "helpful",
+      "selection_score": 0.020228723710087,
+      "selection_rank": 2,
+      "method": "random"
+    },
+    {
+      "id": "helpful-070",
+      "dataset": "helpful",
+      "selection_score": 0.064355695923615,
+      "selection_rank": 3,
+      "method": "random"
+    },
+    {
+      "id": "safe-072",
+      "dataset": "safe",
+      "selection_score": 0.068203181958334,
+      "selection_rank": 4,
+      "method": "random"
+    },
+    {
+      "id": "safe-092",
+      "dataset": "safe",
+      "selection_score": 0.077390501787783,
+      "selection_rank": 5,
+      "method": "random"
+    },
+    {
+      "id": "safe-036",
+      "dataset": "safe",
+      "selection_score": 0.081703289261678,
+      "selection_rank": 6,
+      "method": "random"
+    },
+    {
+      "id": "safe-101",
+      "dataset": "safe",
+      "selection_score": 0.08170851244184,
+      "selection_rank": 7,
+      "method": "random"
+    },
+    {
+      "id": "safe-056",
+      "dataset": "safe",
+      "selection_score": 0.102463581475179,
+      "selection_rank": 8,
+      "method": "random"
+    },
+    {
+      "id": "helpful-026",
+      "dataset": "helpful",
+      "selection_score": 0.10685127402374,
+      "selection_rank": 9,
+      "method": "random"
+    },
+    {
+      "id": "safe-121",
+      "dataset": "safe",
+      "selection_score": 0.108393795891421,
+      "selection_rank": 10,
+      "method": "random"
+    },
+    {
+      "id": "helpful-018",
+      "dataset": "helpful",
+      "selection_score": 0.115079382123447,
+      "selection_rank": 11,
+      "method": "random"
+    },
+    {
+      "id": "safe-119",
+      "dataset": "safe",
+      "selection_score": 0.121433119625043,
+      "selection_rank": 12,
+      "method": "random"
+    },
+    {
+      "id": "helpful-094",
+      "dataset": "helpful",
+      "selection_score": 0.134351737298393,
+      "selection_rank": 13,
+      "method": "random"
+    },
+    {
+      "id": "helpful-108",
+      "dataset": "helpful",
+      "selection_score": 0.135087862509266,
+      "selection_rank": 14,
+      "method": "random"
+    },
+    {
+      "id": "safe-115",
+      "dataset": "safe",
+      "selection_score": 0.145443449447654,
+      "selection_rank": 15,
+      "method": "random"
+    },
+    {
+      "id": "helpful-116",
+      "dataset": "helpful",
+      "selection_score": 0.170246271563605,
+      "selection_rank": 16,
+      "method": "random"
+    },
+    {
+      "id": "helpful-013",
+      "dataset": "helpful",
+      "selection_score": 0.179291410418108,
+      "selection_rank": 17,
+      "method": "random"
+    },
+    {
+      "id": "helpful-049",
+      "dataset": "helpful",
+      "selection_score": 0.187890210784538,
+      "selection_rank": 18,
+      "method": "random"
+    },
+    {
+      "id": "safe-083",
+      "dataset": "safe",
+      "selection_score": 0.188691986267364,
+      "selection_rank": 19,
+      "method": "random"
+    },
+    {
+      "id": "helpful-011",
+      "dataset": "helpful",
+      "selection_score": 0.189320384539761,
+      "selection_rank": 20,
+      "method": "random"
+    },
+    {
+      "id": "safe-111",
+      "dataset": "safe",
+      "selection_score": 0.193017190259904,
+      "selection_rank": 21,
+      "method": "random"
+    },
+    {
+      "id": "helpful-088",
+      "dataset": "helpful",
+      "selection_score": 0.20134469790177,
+      "selection_rank": 22,
+      "method": "random"
+    },
+    {
+      "id": "safe-078",
+      "dataset": "safe",
+      "selection_score": 0.210628842656496,
+      "selection_rank": 23,
+      "method": "random"
+    },
+    {
+      "id": "helpful-079",
+      "dataset": "helpful",
+      "selection_score": 0.219389934508338,
+      "selection_rank": 24,
+      "method": "random"
+    },
+    {
+      "id": "safe-018",
+      "dataset": "safe",
+      "selection_score": 0.222213898290922,
+      "selection_rank": 25,
+      "method": "random"
+    },
+    {
+      "id": "helpful-015",
+      "dataset": "helpful",
+      "selection_score": 0.230541246589906,
+      "selection_rank": 26,
+      "method": "random"
+    },
+    {
+      "id": "safe-068",
+      "dataset": "safe",
+      "selection_score": 0.240720889334223,
+      "selection_rank": 27,
+      "method": "random"
+    },
+    {
+      "id": "helpful-005",
+      "dataset": "helpful",
+      "selection_score": 0.250824458108446,
+      "selection_rank": 28,
+      "method": "random"
+    },
+    {
+      "id": "helpful-029",
+      "dataset": "helpful",
+      "selection_score": 0.25795495876099,
+      "selection_rank": 29,
+      "method": "random"
+    },
+    {
+      "id": "helpful-045",
+      "dataset": "helpful",
+      "selection_score": 0.25877108942215,
+      "selection_rank": 30,
+      "method": "random"
+    },
+    {
+      "id": "safe-015",
+      "dataset": "safe",
+      "selection_score": 0.282640410544328,
+      "selection_rank": 31,
+      "method": "random"
+    },
+    {
+      "id": "safe-048",
+      "dataset": "safe",
+      "selection_score": 0.291107148540998,
+      "selection_rank": 32,
+      "method": "random"
+    },
+    {
+      "id": "safe-096",
+      "dataset": "safe",
+      "selection_score": 0.310140678351591,
+      "selection_rank": 33,
+      "method": "random"
+    },
+    {
+      "id": "helpful-113",
+      "dataset": "helpful",
+      "selection_score": 0.323895052134076,
+      "selection_rank": 34,
+      "method": "random"
+    },
+    {
+      "id": "helpful-014",
+      "dataset": "helpful",
+      "selection_score": 0.349889240595958,
+      "selection_rank": 35,
+      "method": "random"
+    },
+    {
+      "id": "safe-059",
+      "dataset": "safe",
+      "selection_score": 0.404472837203963,
+      "selection_rank": 36,
+      "method": "random"
+    },
+    {
+      "id": "helpful-077",
+      "dataset": "helpful",
+      "selection_score": 0.408098468055984,
+      "selection_rank": 37,
+      "method": "random"
+    },
+    {
+      "id": "helpful-030",
+      "dataset": "helpful",
+      "selection_score": 0.416896040633103,
+      "selection_rank": 38,
+      "method": "random"
+    },
+    {
+      "id": "helpful-111",
+      "dataset": "helpful",
+      "selection_score": 0.419007048011468,
+      "selection_rank": 39,
+      "method": "random"
+    },
+    {
+      "id": "safe-047",
+      "dataset": "safe",
+      "selection_score": 0.436536321956168,
+      "selection_rank": 40,
+      "method": "random"
+    },
+    {
+      "id": "safe-044",
+      "dataset": "safe",
+      "selection_score": 0.448963381573214,
+      "selection_rank": 41,
+      "method": "random"
+    },
+    {
+      "id": "helpful-031",
+      "dataset": "helpful",
+      "selection_score": 0.453616121853276,
+      "selection_rank": 42,
+      "method": "random"
+    },
+    {
+      "id": "safe-108",
+      "dataset": "safe",
+      "selection_score": 0.457725614837883,
+      "selection_rank": 43,
+      "method": "random"
+    },
+    {
+      "id": "safe-125",
+      "dataset": "safe",
+      "selection_score": 0.461159286721855,
+      "selection_rank": 44,
+      "method": "random"
+    },
+    {
+      "id": "helpful-037",
+      "dataset": "helpful",
+      "selection_score": 0.468146590943901,
+      "selection_rank": 45,
+      "method": "random"
+    },
+    {
+      "id": "safe-027",
+      "dataset": "safe",
+      "selection_score": 0.475997127312524,
+      "selection_rank": 46,
+      "method": "random"
+    }
+  ],
+  "random:0.75": [
+    {
+      "id": "helpful-023",
+      "dataset": "helpful",
+      "selection_score": 0.00282703218662,
+      "selection_rank": 1,
+      "method": "random"
+    },
+    {
+      "id": "helpful-097",
+      "dataset": "helpful",
+      "selection_score": 0.020228723710087,
+      "selection_rank": 2,
+      "method": "random"
+    },
+    {
+      "id": "helpful-070",
+      "dataset": "helpful",
+      "selection_score": 0.064355695923615,
+      "selection_rank": 3,
+      "method": "random"
+    },
+    {
+      "id": "safe-072",
+      "dataset": "safe",
+      "selection_score": 0.068203181958334,
+      "selection_rank": 4,
+      "method": "random"
+    },
+    {
+      "id": "safe-092",
+      "dataset": "safe",
+      "selection_score": 0.077390501787783,
+      "selection_rank": 5,
+      "method": "random"
+    },
+    {
+      "id": "safe-036",
+      "dataset": "safe",
+      "selection_score": 0.081703289261678,
+      "selection_rank": 6,
+      "method": "random"
+    },
+    {
+      "id": "safe-101",
+      "dataset": "safe",
+      "selection_score": 0.08170851244184,
+      "selection_rank": 7,
+      "method": "random"
+    },
+    {
+      "id": "safe-056",
+      "dataset": "safe",
+      "selection_score": 0.102463581475179,
+      "selection_rank": 8,
+      "method": "random"
+    },
+    {
+      "id": "helpful-026",
+      "dataset": "helpful",
+      "selection_score": 0.10685127402374,
+      "selection_rank": 9,
+      "method": "random"
+    },
+    {
+      "id": "safe-121",
+      "dataset": "safe",
+      "selection_score": 0.108393795891421,
+      "selection_rank": 10,
+      "method": "random"
+    },
+    {
+      "id": "helpful-018",
+      "dataset": "helpful",
+      "selection_score": 0.115079382123447,
+      "selection_rank": 11,
+      "method": "random"
+    },
+    {
+      "id": "safe-119",
+      "dataset": "safe",
+      "selection_score": 0.121433119625043,
+      "selection_rank": 12,
+      "method": "random"
+    },
+    {
+      "id": "helpful-094",
+      "dataset": "helpful",
+      "selection_score": 0.134351737298393,
+      "selection_rank": 13,
+      "method": "random"
+    },
+    {
+      "id": "helpful-108",
+      "dataset": "helpful",
+      "selection_score": 0.135087862509266,
+      "selection_rank": 14,
+      "method": "random"
+    },
+    {
+      "id": "safe-115",
+      "dataset": "safe",
+      "selection_score": 0.145443449447654,
+      "selection_rank": 15,
+      "method": "random"
+    },
+    {
+      "id": "helpful-116",
+      "dataset": "helpful",
+      "selection_score": 0.170246271563605,
+      "selection_rank": 16,
+      "method": "random"
+    },
+    {
+      "id": "helpful-013",
+      "dataset": "helpful",
+      "selection_score": 0.179291410418108,
+      "selection_rank": 17,
+      "method": "random"
+    },
+    {
+      "id": "helpful-049",
+      "dataset": "helpful",
+      "selection_score": 0.187890210784538,
+      "selection_rank": 18,
+      "method": "random"
+    },
+    {
+      "id": "safe-083",
+      "dataset": "safe",
+      "selection_score": 0.188691986267364,
+      "selection_rank": 19,
+      "method": "random"
+    },
+    {
+      "id": "helpful-011",
+      "dataset": "helpful",
+      "selection_score": 0.189320384539761,
+      "selection_rank": 20,
+      "method": "random"
+    },
+    {
+      "id": "safe-111",
+      "dataset": "safe",
+      "selection_score": 0.193017190259904,
+      "selection_rank": 21,
+      "method": "random"
+    },
+    {
+      "id": "helpful-088",
+      "dataset": "helpful",
+      "selection_score": 0.20134469790177,
+      "selection_rank": 22,
+      "method": "random"
+    },
+    {
+      "id": "safe-078",
+      "dataset": "safe",
+      "selection_score": 0.210628842656496,
+      "selection_rank": 23,
+      "method": "random"
+    },
+    {
+      "id": "helpful-079",
+      "dataset": "helpful",
+      "selection_score": 0.219389934508338,
+      "selection_rank": 24,
+      "method": "random"
+    },
+    {
+      "id": "safe-018",
+      "dataset": "safe",
+      "selection_score": 0.222213898290922,
+      "selection_rank": 25,
+      "method": "random"
+    },
+    {
+      "id": "helpful-015",
+      "dataset": "helpful",
+      "selection_score": 0.230541246589906,
+      "selection_rank": 26,
+      "method": "random"
+    },
+    {
+      "id": "safe-068",
+      "dataset": "safe",
+      "selection_score": 0.240720889334223,
+      "selection_rank": 27,
+      "method": "random"
+    },
+    {
+      "id": "helpful-005",
+      "dataset": "helpful",
+      "selection_score": 0.250824458108446,
+      "selection_rank": 28,
+      "method": "random"
+    },
+    {
+      "id": "helpful-029",
+      "dataset": "helpful",
+      "selection_score": 0.25795495876099,
+      "selection_rank": 29,
+      "method": "random"
+    },
+    {
+      "id": "helpful-045",
+      "dataset": "helpful",
+      "selection_score": 0.25877108942215,
+      "selection_rank": 30,
+      "method": "random"
+    },
+    {
+      "id": "safe-015",
+      "dataset": "safe",
+      "selection_score": 0.282640410544328,
+      "selection_rank": 31,
+      "method": "random"
+    },
+    {
+      "id": "safe-048",
+      "dataset": "safe",
+      "selection_score": 0.291107148540998,
+      "selection_rank": 32,
+      "method": "random"
+    },
+    {
+      "id": "safe-096",
+      "dataset": "safe",
+      "selection_score": 0.310140678351591,
+      "selection_rank": 33,
+      "method": "random"
+    },
+    {
+      "id": "helpful-113",
+      "dataset": "helpful",
+      "selection_score": 0.323895052134076,
+      "selection_rank": 34,
+      "method": "random"
+    },
+    {
+      "id": "helpful-014",
+      "dataset": "helpful",
+      "selection_score": 0.349889240595958,
+      "selection_rank": 35,
+      "method": "random"
+    },
+    {
+      "id": "safe-059",
+      "dataset": "safe",
+      "selection_score": 0.404472837203963,
+      "selection_rank": 36,
+      "method": "random"
+    },
+    {
+      "id": "helpful-077",
+      "dataset": "helpful",
+      "selection_score": 0.408098468055984,
+      "selection_rank": 37,
+      "method": "random"
+    },
+    {
+      "id": "helpful-030",
+      "dataset": "helpful",
+      "selection_score": 0.416896040633103,
+      "selection_rank": 38,
+      "method": "random"
+    },
+    {
+      "id": "helpful-111",
+      "dataset": "helpful",
+      "selection_score": 0.419007048011468,
+      "selection_rank": 39,
+      "method": "random"
+    },
+    {
+      "id": "safe-047",
+      "dataset": "safe",
+      "selection_score": 0.436536321956168,
+      "selection_rank": 40,
+      "method": "random"
+    },
+    {
+      "id": "safe-044",
+      "dataset": "safe",
+      "selection_score": 0.448963381573214,
+      "selection_rank": 41,
+      "method": "random"
+    },
+    {
+      "id": "helpful-031",
+      "dataset": "helpful",
+      "selection_score": 0.453616121853276,
+      "selection_rank": 42,
+      "method": "random"
+    },
+    {
+      "id": "safe-108",
+      "dataset": "safe",
+      "selection_score": 0.457725614837883,
+      "selection_rank": 43,
+      "method": "random"
+    },
+    {
+      "id": "safe-125",
+      "dataset": "safe",
+      "selection_score": 0.461159286721855,
+      "selection_rank": 44,
+      "method": "random"
+    },
+    {
+      "id": "helpful-037",
+      "dataset": "helpful",
+      "selection_score": 0.468146590943901,
+      "selection_rank": 45,
+      "method": "random"
+    },
+    {
+      "id": "safe-027",
+      "dataset": "safe",
+      "selection_score": 0.475997127312524,
+      "selection_rank": 46,
+      "method": "random"
+    }
+  ],
+  "random_high:None": [
+    {
+      "id": "helpful-023",
+      "dataset": "helpful",
+      "selection_score": 0.00282703218662,
+      "selection_rank": 1,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-097",
+      "dataset": "helpful",
+      "selection_score": 0.020228723710087,
+      "selection_rank": 2,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-070",
+      "dataset": "helpful",
+      "selection_score": 0.064355695923615,
+      "selection_rank": 3,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-072",
+      "dataset": "safe",
+      "selection_score": 0.068203181958334,
+      "selection_rank": 4,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-092",
+      "dataset": "safe",
+      "selection_score": 0.077390501787783,
+      "selection_rank": 5,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-036",
+      "dataset": "safe",
+      "selection_score": 0.081703289261678,
+      "selection_rank": 6,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-101",
+      "dataset": "safe",
+      "selection_score": 0.08170851244184,
+      "selection_rank": 7,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-056",
+      "dataset": "safe",
+      "selection_score": 0.102463581475179,
+      "selection_rank": 8,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-026",
+      "dataset": "helpful",
+      "selection_score": 0.10685127402374,
+      "selection_rank": 9,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-121",
+      "dataset": "safe",
+      "selection_score": 0.108393795891421,
+      "selection_rank": 10,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-018",
+      "dataset": "helpful",
+      "selection_score": 0.115079382123447,
+      "selection_rank": 11,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-119",
+      "dataset": "safe",
+      "selection_score": 0.121433119625043,
+      "selection_rank": 12,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-094",
+      "dataset": "helpful",
+      "selection_score": 0.134351737298393,
+      "selection_rank": 13,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-108",
+      "dataset": "helpful",
+      "selection_score": 0.135087862509266,
+      "selection_rank": 14,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-115",
+      "dataset": "safe",
+      "selection_score": 0.145443449447654,
+      "selection_rank": 15,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-116",
+      "dataset": "helpful",
+      "selection_score": 0.170246271563605,
+      "selection_rank": 16,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-013",
+      "dataset": "helpful",
+      "selection_score": 0.179291410418108,
+      "selection_rank": 17,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-049",
+      "dataset": "helpful",
+      "selection_score": 0.187890210784538,
+      "selection_rank": 18,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-083",
+      "dataset": "safe",
+      "selection_score": 0.188691986267364,
+      "selection_rank": 19,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-011",
+      "dataset": "helpful",
+      "selection_score": 0.189320384539761,
+      "selection_rank": 20,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-111",
+      "dataset": "safe",
+      "selection_score": 0.193017190259904,
+      "selection_rank": 21,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-088",
+      "dataset": "helpful",
+      "selection_score": 0.20134469790177,
+      "selection_rank": 22,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-078",
+      "dataset": "safe",
+      "selection_score": 0.210628842656496,
+      "selection_rank": 23,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-079",
+      "dataset": "helpful",
+      "selection_score": 0.219389934508338,
+      "selection_rank": 24,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-018",
+      "dataset": "safe",
+      "selection_score": 0.222213898290922,
+      "selection_rank": 25,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-015",
+      "dataset": "helpful",
+      "selection_score": 0.230541246589906,
+      "selection_rank": 26,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-068",
+      "dataset": "safe",
+      "selection_score": 0.240720889334223,
+      "selection_rank": 27,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-005",
+      "dataset": "helpful",
+      "selection_score": 0.250824458108446,
+      "selection_rank": 28,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-029",
+      "dataset": "helpful",
+      "selection_score": 0.25795495876099,
+      "selection_rank": 29,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-045",
+      "dataset": "helpful",
+      "selection_score": 0.25877108942215,
+      "selection_rank": 30,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-015",
+      "dataset": "safe",
+      "selection_score": 0.282640410544328,
+      "selection_rank": 31,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-048",
+      "dataset": "safe",
+      "selection_score": 0.291107148540998,
+      "selection_rank": 32,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-096",
+      "dataset": "safe",
+      "selection_score": 0.310140678351591,
+      "selection_rank": 33,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-113",
+      "dataset": "helpful",
+      "selection_score": 0.323895052134076,
+      "selection_rank": 34,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-014",
+      "dataset": "helpful",
+      "selection_score": 0.349889240595958,
+      "selection_rank": 35,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-059",
+      "dataset": "safe",
+      "selection_score": 0.404472837203963,
+      "selection_rank": 36,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-077",
+      "dataset": "helpful",
+      "selection_score": 0.408098468055984,
+      "selection_rank": 37,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-030",
+      "dataset": "helpful",
+      "selection_score": 0.416896040633103,
+      "selection_rank": 38,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-111",
+      "dataset": "helpful",
+      "selection_score": 0.419007048011468,
+      "selection_rank": 39,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-047",
+      "dataset": "safe",
+      "selection_score": 0.436536321956168,
+      "selection_rank": 40,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-044",
+      "dataset": "safe",
+      "selection_score": 0.448963381573214,
+      "selection_rank": 41,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-031",
+      "dataset": "helpful",
+      "selection_score": 0.453616121853276,
+      "selection_rank": 42,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-108",
+      "dataset": "safe",
+      "selection_score": 0.457725614837883,
+      "selection_rank": 43,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-125",
+      "dataset": "safe",
+      "selection_score": 0.461159286721855,
+      "selection_rank": 44,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-037",
+      "dataset": "helpful",
+      "selection_score": 0.468146590943901,
+      "selection_rank": 45,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-027",
+      "dataset": "safe",
+      "selection_score": 0.475997127312524,
+      "selection_rank": 46,
+      "method": "random_high"
+    }
+  ],
+  "random_high:0.75": [
+    {
+      "id": "helpful-023",
+      "dataset": "helpful",
+      "selection_score": 0.00282703218662,
+      "selection_rank": 1,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-097",
+      "dataset": "helpful",
+      "selection_score": 0.020228723710087,
+      "selection_rank": 2,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-070",
+      "dataset": "helpful",
+      "selection_score": 0.064355695923615,
+      "selection_rank": 3,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-072",
+      "dataset": "safe",
+      "selection_score": 0.068203181958334,
+      "selection_rank": 4,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-092",
+      "dataset": "safe",
+      "selection_score": 0.077390501787783,
+      "selection_rank": 5,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-036",
+      "dataset": "safe",
+      "selection_score": 0.081703289261678,
+      "selection_rank": 6,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-101",
+      "dataset": "safe",
+      "selection_score": 0.08170851244184,
+      "selection_rank": 7,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-056",
+      "dataset": "safe",
+      "selection_score": 0.102463581475179,
+      "selection_rank": 8,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-026",
+      "dataset": "helpful",
+      "selection_score": 0.10685127402374,
+      "selection_rank": 9,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-121",
+      "dataset": "safe",
+      "selection_score": 0.108393795891421,
+      "selection_rank": 10,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-018",
+      "dataset": "helpful",
+      "selection_score": 0.115079382123447,
+      "selection_rank": 11,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-119",
+      "dataset": "safe",
+      "selection_score": 0.121433119625043,
+      "selection_rank": 12,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-094",
+      "dataset": "helpful",
+      "selection_score": 0.134351737298393,
+      "selection_rank": 13,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-108",
+      "dataset": "helpful",
+      "selection_score": 0.135087862509266,
+      "selection_rank": 14,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-115",
+      "dataset": "safe",
+      "selection_score": 0.145443449447654,
+      "selection_rank": 15,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-116",
+      "dataset": "helpful",
+      "selection_score": 0.170246271563605,
+      "selection_rank": 16,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-013",
+      "dataset": "helpful",
+      "selection_score": 0.179291410418108,
+      "selection_rank": 17,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-049",
+      "dataset": "helpful",
+      "selection_score": 0.187890210784538,
+      "selection_rank": 18,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-083",
+      "dataset": "safe",
+      "selection_score": 0.188691986267364,
+      "selection_rank": 19,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-011",
+      "dataset": "helpful",
+      "selection_score": 0.189320384539761,
+      "selection_rank": 20,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-111",
+      "dataset": "safe",
+      "selection_score": 0.193017190259904,
+      "selection_rank": 21,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-088",
+      "dataset": "helpful",
+      "selection_score": 0.20134469790177,
+      "selection_rank": 22,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-078",
+      "dataset": "safe",
+      "selection_score": 0.210628842656496,
+      "selection_rank": 23,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-079",
+      "dataset": "helpful",
+      "selection_score": 0.219389934508338,
+      "selection_rank": 24,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-018",
+      "dataset": "safe",
+      "selection_score": 0.222213898290922,
+      "selection_rank": 25,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-015",
+      "dataset": "helpful",
+      "selection_score": 0.230541246589906,
+      "selection_rank": 26,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-068",
+      "dataset": "safe",
+      "selection_score": 0.240720889334223,
+      "selection_rank": 27,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-005",
+      "dataset": "helpful",
+      "selection_score": 0.250824458108446,
+      "selection_rank": 28,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-029",
+      "dataset": "helpful",
+      "selection_score": 0.25795495876099,
+      "selection_rank": 29,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-045",
+      "dataset": "helpful",
+      "selection_score": 0.25877108942215,
+      "selection_rank": 30,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-015",
+      "dataset": "safe",
+      "selection_score": 0.282640410544328,
+      "selection_rank": 31,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-048",
+      "dataset": "safe",
+      "selection_score": 0.291107148540998,
+      "selection_rank": 32,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-096",
+      "dataset": "safe",
+      "selection_score": 0.310140678351591,
+      "selection_rank": 33,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-113",
+      "dataset": "helpful",
+      "selection_score": 0.323895052134076,
+      "selection_rank": 34,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-014",
+      "dataset": "helpful",
+      "selection_score": 0.349889240595958,
+      "selection_rank": 35,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-059",
+      "dataset": "safe",
+      "selection_score": 0.404472837203963,
+      "selection_rank": 36,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-077",
+      "dataset": "helpful",
+      "selection_score": 0.408098468055984,
+      "selection_rank": 37,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-030",
+      "dataset": "helpful",
+      "selection_score": 0.416896040633103,
+      "selection_rank": 38,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-111",
+      "dataset": "helpful",
+      "selection_score": 0.419007048011468,
+      "selection_rank": 39,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-047",
+      "dataset": "safe",
+      "selection_score": 0.436536321956168,
+      "selection_rank": 40,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-044",
+      "dataset": "safe",
+      "selection_score": 0.448963381573214,
+      "selection_rank": 41,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-031",
+      "dataset": "helpful",
+      "selection_score": 0.453616121853276,
+      "selection_rank": 42,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-108",
+      "dataset": "safe",
+      "selection_score": 0.457725614837883,
+      "selection_rank": 43,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-125",
+      "dataset": "safe",
+      "selection_score": 0.461159286721855,
+      "selection_rank": 44,
+      "method": "random_high"
+    },
+    {
+      "id": "helpful-037",
+      "dataset": "helpful",
+      "selection_score": 0.468146590943901,
+      "selection_rank": 45,
+      "method": "random_high"
+    },
+    {
+      "id": "safe-027",
+      "dataset": "safe",
+      "selection_score": 0.475997127312524,
+      "selection_rank": 46,
+      "method": "random_high"
+    }
+  ],
+  "lowest_margin:None": [
+    {
+      "id": "helpful-117",
+      "dataset": "helpful",
+      "selection_score": 0.5,
+      "selection_rank": 1,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-113",
+      "dataset": "helpful",
+      "selection_score": 0.45959595959596,
+      "selection_rank": 2,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-041",
+      "dataset": "safe",
+      "selection_score": 0.44949494949495,
+      "selection_rank": 3,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-013",
+      "dataset": "helpful",
+      "selection_score": 0.429292929292929,
+      "selection_rank": 4,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-071",
+      "dataset": "safe",
+      "selection_score": 0.419191919191919,
+      "selection_rank": 5,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-029",
+      "dataset": "helpful",
+      "selection_score": 0.348484848484848,
+      "selection_rank": 6,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-033",
+      "dataset": "safe",
+      "selection_score": 0.328282828282828,
+      "selection_rank": 7,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-108",
+      "dataset": "helpful",
+      "selection_score": 0.297979797979798,
+      "selection_rank": 8,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-025",
+      "dataset": "helpful",
+      "selection_score": 0.267676767676768,
+      "selection_rank": 9,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-122",
+      "dataset": "safe",
+      "selection_score": 0.257575757575758,
+      "selection_rank": 10,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-119",
+      "dataset": "safe",
+      "selection_score": 0.25,
+      "selection_rank": 11,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-019",
+      "dataset": "helpful",
+      "selection_score": 0.247474747474747,
+      "selection_rank": 12,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-083",
+      "dataset": "safe",
+      "selection_score": 0.21969696969697,
+      "selection_rank": 13,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-037",
+      "dataset": "helpful",
+      "selection_score": 0.217171717171717,
+      "selection_rank": 14,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-075",
+      "dataset": "helpful",
+      "selection_score": 0.176767676767677,
+      "selection_rank": 15,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-005",
+      "dataset": "helpful",
+      "selection_score": 0.16969696969697,
+      "selection_rank": 16,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-059",
+      "dataset": "safe",
+      "selection_score": 0.139393939393939,
+      "selection_rank": 17,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-085",
+      "dataset": "helpful",
+      "selection_score": 0.126262626262626,
+      "selection_rank": 18,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-020",
+      "dataset": "safe",
+      "selection_score": 0.116161616161616,
+      "selection_rank": 19,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-095",
+      "dataset": "helpful",
+      "selection_score": 0.109090909090909,
+      "selection_rank": 20,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-045",
+      "dataset": "safe",
+      "selection_score": 0.106060606060606,
+      "selection_rank": 21,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-020",
+      "dataset": "helpful",
+      "selection_score": 0.088383838383838,
+      "selection_rank": 22,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-121",
+      "dataset": "helpful",
+      "selection_score": 0.085858585858586,
+      "selection_rank": 23,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-102",
+      "dataset": "safe",
+      "selection_score": 0.068686868686869,
+      "selection_rank": 24,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-071",
+      "dataset": "helpful",
+      "selection_score": 0.068686868686869,
+      "selection_rank": 25,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-023",
+      "dataset": "helpful",
+      "selection_score": 0.058585858585859,
+      "selection_rank": 26,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-103",
+      "dataset": "safe",
+      "selection_score": 0.055555555555556,
+      "selection_rank": 27,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-018",
+      "dataset": "helpful",
+      "selection_score": 0.04949494949495,
+      "selection_rank": 28,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-061",
+      "dataset": "safe",
+      "selection_score": 0.025252525252525,
+      "selection_rank": 29,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-078",
+      "dataset": "safe",
+      "selection_score": -0.015151515151515,
+      "selection_rank": 30,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-115",
+      "dataset": "safe",
+      "selection_score": -0.051515151515152,
+      "selection_rank": 31,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-047",
+      "dataset": "safe",
+      "selection_score": -0.052525252525253,
+      "selection_rank": 32,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-045",
+      "dataset": "helpful",
+      "selection_score": -0.065656565656566,
+      "selection_rank": 33,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-015",
+      "dataset": "safe",
+      "selection_score": -0.065656565656566,
+      "selection_rank": 34,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-111",
+      "dataset": "safe",
+      "selection_score": -0.082828282828283,
+      "selection_rank": 35,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-101",
+      "dataset": "safe",
+      "selection_score": -0.083333333333333,
+      "selection_rank": 36,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-079",
+      "dataset": "helpful",
+      "selection_score": -0.083333333333333,
+      "selection_rank": 37,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-126",
+      "dataset": "helpful",
+      "selection_score": -0.093434343434343,
+      "selection_rank": 38,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-125",
+      "dataset": "safe",
+      "selection_score": -0.095959595959596,
+      "selection_rank": 39,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-124",
+      "dataset": "helpful",
+      "selection_score": -0.095959595959596,
+      "selection_rank": 40,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-031",
+      "dataset": "helpful",
+      "selection_score": -0.113131313131313,
+      "selection_rank": 41,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-072",
+      "dataset": "safe",
+      "selection_score": -0.122222222222222,
+      "selection_rank": 42,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-097",
+      "dataset": "helpful",
+      "selection_score": -0.126262626262626,
+      "selection_rank": 43,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-018",
+      "dataset": "safe",
+      "selection_score": -0.132323232323232,
+      "selection_rank": 44,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-107",
+      "dataset": "helpful",
+      "selection_score": -0.142424242424242,
+      "selection_rank": 45,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-094",
+      "dataset": "safe",
+      "selection_score": -0.146464646464647,
+      "selection_rank": 46,
+      "method": "lowest_margin"
+    }
+  ],
+  "lowest_margin:0.75": [
+    {
+      "id": "helpful-117",
+      "dataset": "helpful",
+      "selection_score": 0.5,
+      "selection_rank": 1,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-113",
+      "dataset": "helpful",
+      "selection_score": 0.45959595959596,
+      "selection_rank": 2,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-041",
+      "dataset": "safe",
+      "selection_score": 0.44949494949495,
+      "selection_rank": 3,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-013",
+      "dataset": "helpful",
+      "selection_score": 0.429292929292929,
+      "selection_rank": 4,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-071",
+      "dataset": "safe",
+      "selection_score": 0.419191919191919,
+      "selection_rank": 5,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-029",
+      "dataset": "helpful",
+      "selection_score": 0.348484848484848,
+      "selection_rank": 6,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-033",
+      "dataset": "safe",
+      "selection_score": 0.328282828282828,
+      "selection_rank": 7,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-108",
+      "dataset": "helpful",
+      "selection_score": 0.297979797979798,
+      "selection_rank": 8,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-025",
+      "dataset": "helpful",
+      "selection_score": 0.267676767676768,
+      "selection_rank": 9,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-122",
+      "dataset": "safe",
+      "selection_score": 0.257575757575758,
+      "selection_rank": 10,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-119",
+      "dataset": "safe",
+      "selection_score": 0.25,
+      "selection_rank": 11,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-019",
+      "dataset": "helpful",
+      "selection_score": 0.247474747474747,
+      "selection_rank": 12,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-083",
+      "dataset": "safe",
+      "selection_score": 0.21969696969697,
+      "selection_rank": 13,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-037",
+      "dataset": "helpful",
+      "selection_score": 0.217171717171717,
+      "selection_rank": 14,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-075",
+      "dataset": "helpful",
+      "selection_score": 0.176767676767677,
+      "selection_rank": 15,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-005",
+      "dataset": "helpful",
+      "selection_score": 0.16969696969697,
+      "selection_rank": 16,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-059",
+      "dataset": "safe",
+      "selection_score": 0.139393939393939,
+      "selection_rank": 17,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-085",
+      "dataset": "helpful",
+      "selection_score": 0.126262626262626,
+      "selection_rank": 18,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-020",
+      "dataset": "safe",
+      "selection_score": 0.116161616161616,
+      "selection_rank": 19,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-095",
+      "dataset": "helpful",
+      "selection_score": 0.109090909090909,
+      "selection_rank": 20,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-045",
+      "dataset": "safe",
+      "selection_score": 0.106060606060606,
+      "selection_rank": 21,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-020",
+      "dataset": "helpful",
+      "selection_score": 0.088383838383838,
+      "selection_rank": 22,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-121",
+      "dataset": "helpful",
+      "selection_score": 0.085858585858586,
+      "selection_rank": 23,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-102",
+      "dataset": "safe",
+      "selection_score": 0.068686868686869,
+      "selection_rank": 24,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-071",
+      "dataset": "helpful",
+      "selection_score": 0.068686868686869,
+      "selection_rank": 25,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-023",
+      "dataset": "helpful",
+      "selection_score": 0.058585858585859,
+      "selection_rank": 26,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-103",
+      "dataset": "safe",
+      "selection_score": 0.055555555555556,
+      "selection_rank": 27,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-018",
+      "dataset": "helpful",
+      "selection_score": 0.04949494949495,
+      "selection_rank": 28,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-061",
+      "dataset": "safe",
+      "selection_score": 0.025252525252525,
+      "selection_rank": 29,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-078",
+      "dataset": "safe",
+      "selection_score": -0.015151515151515,
+      "selection_rank": 30,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-115",
+      "dataset": "safe",
+      "selection_score": -0.051515151515152,
+      "selection_rank": 31,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-047",
+      "dataset": "safe",
+      "selection_score": -0.052525252525253,
+      "selection_rank": 32,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-045",
+      "dataset": "helpful",
+      "selection_score": -0.065656565656566,
+      "selection_rank": 33,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-015",
+      "dataset": "safe",
+      "selection_score": -0.065656565656566,
+      "selection_rank": 34,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-111",
+      "dataset": "safe",
+      "selection_score": -0.082828282828283,
+      "selection_rank": 35,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-101",
+      "dataset": "safe",
+      "selection_score": -0.083333333333333,
+      "selection_rank": 36,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-079",
+      "dataset": "helpful",
+      "selection_score": -0.083333333333333,
+      "selection_rank": 37,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-126",
+      "dataset": "helpful",
+      "selection_score": -0.093434343434343,
+      "selection_rank": 38,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-125",
+      "dataset": "safe",
+      "selection_score": -0.095959595959596,
+      "selection_rank": 39,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-124",
+      "dataset": "helpful",
+      "selection_score": -0.095959595959596,
+      "selection_rank": 40,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-031",
+      "dataset": "helpful",
+      "selection_score": -0.113131313131313,
+      "selection_rank": 41,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-072",
+      "dataset": "safe",
+      "selection_score": -0.122222222222222,
+      "selection_rank": 42,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-097",
+      "dataset": "helpful",
+      "selection_score": -0.126262626262626,
+      "selection_rank": 43,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-018",
+      "dataset": "safe",
+      "selection_score": -0.132323232323232,
+      "selection_rank": 44,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "helpful-107",
+      "dataset": "helpful",
+      "selection_score": -0.142424242424242,
+      "selection_rank": 45,
+      "method": "lowest_margin"
+    },
+    {
+      "id": "safe-094",
+      "dataset": "safe",
+      "selection_score": -0.146464646464647,
+      "selection_rank": 46,
+      "method": "lowest_margin"
+    }
+  ],
+  "mfr:None": [
+    {
+      "id": "helpful-029",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 1,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-118",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 2,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-033",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 3,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-097",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 4,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-108",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 5,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-013",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 6,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-088",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 7,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-078",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 8,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-045",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 9,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-015",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 10,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-048",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 11,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-077",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 12,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-125",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 13,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-037",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 14,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-041",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 15,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-124",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 16,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-121",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 17,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-107",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 18,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-075",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 19,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-085",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 20,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-016",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 21,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-045",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 22,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-094",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 23,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-099",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 24,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-071",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 25,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-103",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 26,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-122",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 27,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-061",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 28,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-117",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 29,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-029",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 30,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-052",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 31,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-065",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 32,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-019",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 33,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-112",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 34,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-054",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 35,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-007",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 36,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-020",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 37,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-066",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 38,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-113",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 39,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-025",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 40,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-036",
+      "dataset": "safe",
+      "selection_score": 0.05,
+      "selection_rank": 41,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-068",
+      "dataset": "safe",
+      "selection_score": 0.05,
+      "selection_rank": 42,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-109",
+      "dataset": "helpful",
+      "selection_score": 0.05,
+      "selection_rank": 43,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-128",
+      "dataset": "safe",
+      "selection_score": 0.05,
+      "selection_rank": 44,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-118",
+      "dataset": "helpful",
+      "selection_score": 0.05,
+      "selection_rank": 45,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-026",
+      "dataset": "safe",
+      "selection_score": 0.05,
+      "selection_rank": 46,
+      "method": "mfr"
+    }
+  ],
+  "mfr:0.75": [
+    {
+      "id": "helpful-029",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 1,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-118",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 2,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-033",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 3,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-097",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 4,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-108",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 5,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-013",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 6,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-088",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 7,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-078",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 8,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-045",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 9,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-015",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 10,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-048",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 11,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-077",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 12,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-125",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 13,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-037",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 14,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-041",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 15,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-124",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 16,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-121",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 17,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-107",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 18,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-075",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 19,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-085",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 20,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-016",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 21,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-045",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 22,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-094",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 23,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-099",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 24,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-071",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 25,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-103",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 26,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-122",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 27,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-061",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 28,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-117",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 29,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-029",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 30,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-052",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 31,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-065",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 32,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-019",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 33,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-112",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 34,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-054",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 35,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-007",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 36,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-020",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 37,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-066",
+      "dataset": "safe",
+      "selection_score": 0.3,
+      "selection_rank": 38,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-113",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 39,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-025",
+      "dataset": "helpful",
+      "selection_score": 0.3,
+      "selection_rank": 40,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-036",
+      "dataset": "safe",
+      "selection_score": 0.05,
+      "selection_rank": 41,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-068",
+      "dataset": "safe",
+      "selection_score": 0.05,
+      "selection_rank": 42,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-109",
+      "dataset": "helpful",
+      "selection_score": 0.05,
+      "selection_rank": 43,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-128",
+      "dataset": "safe",
+      "selection_score": 0.05,
+      "selection_rank": 44,
+      "method": "mfr"
+    },
+    {
+      "id": "helpful-118",
+      "dataset": "helpful",
+      "selection_score": 0.05,
+      "selection_rank": 45,
+      "method": "mfr"
+    },
+    {
+      "id": "safe-026",
+      "dataset": "safe",
+      "selection_score": 0.05,
+      "selection_rank": 46,
+      "method": "mfr"
+    }
+  ]
+}
