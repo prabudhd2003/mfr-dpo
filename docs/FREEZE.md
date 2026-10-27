@@ -73,3 +73,13 @@ decoding diverges as much inside HF itself).
    (as `make_batch` already does, identically for every method) and listed in
    `artifacts_llama32_3b/cache/tokenizer_validation.json`. The first audit found 8 such pairs in
    total. Made before any Llama training run.
+4. **2026-10-27, buffer pairs with no response token.** Under the Llama tokenizer one frozen
+   training pair (`quality-train-0873`, an Oriya-script prompt) has a 1,058-token prompt, so
+   truncation at 1,024 tokens leaves no response token and its length-normalized margin is 0/0.
+   Only the seed-2 replay buffer samples it, and only in orders 3-6 (where Quality enters the
+   buffer), so those 4 Llama `none_s2` runs stopped with "peak margins missing". `update_buffer`
+   now leaves out of the buffer any candidate whose prompt alone fills `max_tokens` and logs its id.
+   Training on such pairs is unchanged. No completed run (Qwen or Llama) had such a pair in its
+   buffer, so all completed runs are reproduced identically; only the 20 Llama seed-2 runs of
+   orders 3-6 use the new code (the 4 partial `none_s2` runs were moved aside, not resumed).
+   Made before any of those runs' results existed.

@@ -70,6 +70,16 @@ def score_sets(model, tokenizer, splits, stage, trained_on, run_meta, run_dir, p
 def update_buffer(model, tokenizer, buffer, stage, dataset, train_df, stage_dir, protocol,
                   reference_cache, method, anchors=None):
     candidates = buffer.candidates(dataset, train_df)
+    # FREEZE amendment 4: a pair whose prompt alone fills max_tokens keeps no response token after
+    # truncation, so its length-normalized margin is 0/0. It cannot be scored or replayed, so it is
+    # left out of the buffer. Runs without such pairs are unchanged.
+    fits = candidates["prompt"].map(lambda prompt: len(tokenizer(
+        mfr_dpo.chat_prompt(tokenizer, prompt), add_special_tokens=False)["input_ids"])
+        < protocol["max_tokens"])
+    if not fits.all():
+        print(f"Buffer: excluded {int((~fits).sum())} pair(s) with no response token within "
+              f"{protocol['max_tokens']} tokens: {candidates.loc[~fits, 'id'].tolist()}", flush=True)
+        candidates = candidates[fits].reset_index(drop=True)
     peak_scores = mfr_dpo.score_pairs(
         model, tokenizer, candidates, beta=protocol["beta"], max_tokens=protocol["max_tokens"],
         reference_cache=reference_cache, desc=f"stage {stage}: buffer peak"
