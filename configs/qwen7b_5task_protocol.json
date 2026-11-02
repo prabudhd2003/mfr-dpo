@@ -3,11 +3,11 @@
   "data_version": "v3",
   "data_dir": "data/v3",
   "model_name": "Qwen/Qwen2.5-7B-Instruct",
-  "model_revision": "PIN_ME",
+  "model_revision": "a09a35458c702b33eeacc393d103063234e8bc28",
   "behaviors": ["helpful", "safe", "quality", "summarize", "code"],
   "data_sources": {
-    "summarize": {"repo": "CarperAI/openai_summarize_comparisons", "revision": "PIN_ME"},
-    "code": {"repo": "coseal/CodeUltraFeedback_binarized", "revision": "PIN_ME", "min_rating_gap": 1.0}
+    "summarize": {"repo": "CarperAI/openai_summarize_comparisons", "revision": "a320fae2cd84f04610a1b57ac83c2a2f674b8bcd"},
+    "code": {"repo": "coseal/CodeUltraFeedback_binarized", "revision": "3e0094ddc10a0b6db6ce4d739e74a69078ed362d", "min_rating_gap": 1.0}
   },
   "orders": {
     "1": ["helpful", "safe", "quality", "summarize", "code"],
