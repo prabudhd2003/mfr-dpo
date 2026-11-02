@@ -34,7 +34,15 @@
     "dapr_sym",
     "dapr_sym_weak",
     "dapr_lambda_0p003",
-    "dapr_lambda_0p03"
+    "dapr_lambda_0p03",
+    "random_old1",
+    "random_old4",
+    "random_buf250",
+    "random_buf1000",
+    "dapr_weak_old1",
+    "dapr_weak_old4",
+    "dapr_weak_buf250",
+    "dapr_weak_buf1000"
   ],
   "seeds": [0, 1, 2, 3, 4],
   "extension_seeds": [5, 6, 7, 8, 9],
@@ -54,12 +62,22 @@
   "old_per_step": 2,
   "old_per_step_overrides": {
     "random_high": 3,
+    "random_old1": 1,
+    "random_old4": 4,
+    "dapr_weak_old1": 1,
+    "dapr_weak_old4": 4,
     "ewc_100": 0,
     "ewc_1000": 0,
     "ewc_10000": 0
   },
   "micro_batch": 2,
   "buffer_size": 500,
+  "buffer_size_overrides": {
+    "random_buf250": 250,
+    "random_buf1000": 1000,
+    "dapr_weak_buf250": 250,
+    "dapr_weak_buf1000": 1000
+  },
   "refreshes": 5,
   "max_share_per_dataset": 0.75,
   "fmcr_velocity_decay": 0.5,
@@ -73,7 +91,11 @@
     "dapr_sym": 0.1,
     "dapr_sym_weak": 0.01,
     "dapr_lambda_0p003": 0.003,
-    "dapr_lambda_0p03": 0.03
+    "dapr_lambda_0p03": 0.03,
+    "dapr_weak_old1": 0.01,
+    "dapr_weak_old4": 0.01,
+    "dapr_weak_buf250": 0.01,
+    "dapr_weak_buf1000": 0.01
   },
   "dapr_huber_delta": 1.0,
   "mir_lookahead_steps": 1,

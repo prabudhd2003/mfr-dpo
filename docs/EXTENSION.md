@@ -58,6 +58,25 @@ bootstrap as a sensitivity check. There is no second look.
 λ = 0.1 (`dapr`) and λ = 0.01 (`dapr_weak`) runs, they give a four-point sensitivity curve. No test,
 no selection: DAPR's strength stays 0.01.
 
+### A4. Replay budget sensitivity (descriptive, validation, 8 development cells)
+Does DAPR's advantage over Random 10% depend on the replay budget? Random and DAPR (`dapr_weak`) each
+run at four extra budgets on the development cells:
+
+| Code names | Change from the main setting |
+|---|---|
+| `random_old1`, `dapr_weak_old1` | 1 replayed pair per step (18 new + 1, about 5% replay) |
+| `random_old4`, `dapr_weak_old4` | 4 replayed pairs per step (18 new + 4, about 18% replay) |
+| `random_buf250`, `dapr_weak_buf250` | 250-pair buffer |
+| `random_buf1000`, `dapr_weak_buf1000` | 1,000-pair buffer |
+
+- **Other settings:** unchanged. The DAPR variants keep λ = 0.01.
+- **Stage 1:** the buffer is filled only after Stage 1, so Stage 1 does not depend on the buffer size.
+  The buffer-size variants reuse the `none` Stage-1 checkpoint. They then refill the Stage-1 buffer at
+  their own size, from that checkpoint, with the usual seeded rule. The 250-pair candidates are the
+  first 250 of the 500-pair ones.
+- **Reporting:** DAPR − Random at each budget (final average, retention, final task), described per
+  cell. No test, no selection.
+
 ## Part B. Qwen2.5-7B-Instruct, five tasks (`configs/qwen7b_5task_protocol.json`)
 
 ### Data (`data/v3`, built by `scripts/prepare_data_v3.py`)

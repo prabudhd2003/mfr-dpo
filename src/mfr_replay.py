@@ -29,6 +29,8 @@ The methods differ in which stored pairs fill the replay slots of each training 
     dapr_sym        DAPR's lowest-margin selection plus a symmetric anchor, strength 0.1
     dapr_sym_weak   dapr_sym with strength 0.01
     dapr_lambda_*   DAPR with anchor strength 0.003 or 0.03 (sensitivity)
+    random_old1/4, dapr_weak_old1/4        Random / DAPR with 1 or 4 replayed pairs per step
+    random_buf250/1000, dapr_weak_buf250/1000  Random / DAPR with a 250- or 1,000-pair buffer
 
 Everything here is CPU-only and fully seeded: which pairs enter the buffer depends on the run seed
 and the dataset, never on the method, so every method stores exactly the same candidate pairs.
@@ -44,18 +46,24 @@ METHODS = (
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
     "ewc_100", "ewc_1000", "ewc_10000", "mfr_balanced", "mfr_at_risk",
     "der_pp", "der_pp_weak", "dapr_sym", "dapr_sym_weak", "dapr_lambda_0p003", "dapr_lambda_0p03",
+    "random_old1", "random_old4", "random_buf250", "random_buf1000", "dapr_weak_old1", "dapr_weak_old4", "dapr_weak_buf250", "dapr_weak_buf1000",
 )
 REGULARIZATION_METHODS = ("ewc_100", "ewc_1000", "ewc_10000")
 REFRESH_METHODS = (
     "lowest_margin", "mfr", "fmcr", "cpmr", "dapr", "dapr_weak", "dapr_gated",
     "dapr_c", "mir_dpo", "copr_adapted", "mfr_balanced", "mfr_at_risk",
     "dapr_sym", "dapr_sym_weak", "dapr_lambda_0p003", "dapr_lambda_0p03",
+    "dapr_weak_old1", "dapr_weak_old4", "dapr_weak_buf250", "dapr_weak_buf1000",
 )
 # Same uniform selection as random; same lowest-current-margin selection as lowest_margin.
-RANDOM_SELECTION_METHODS = ("random", "random_high", "der_pp", "der_pp_weak")
+RANDOM_SELECTION_METHODS = (
+    "random", "random_high", "der_pp", "der_pp_weak",
+    "random_old1", "random_old4", "random_buf250", "random_buf1000",
+)
 LOWEST_MARGIN_SELECTION_METHODS = (
     "lowest_margin", "dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted",
     "dapr_sym", "dapr_sym_weak", "dapr_lambda_0p003", "dapr_lambda_0p03",
+    "dapr_weak_old1", "dapr_weak_old4", "dapr_weak_buf250", "dapr_weak_buf1000",
 )
 FORECAST_COLUMNS = [
     "previous_margin", "margin_velocity",

@@ -15,6 +15,7 @@ METHOD_ORDER = [
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
     "ewc_100", "ewc_1000", "ewc_10000", "mfr_balanced", "mfr_at_risk",
     "der_pp", "der_pp_weak", "dapr_sym", "dapr_sym_weak", "dapr_lambda_0p003", "dapr_lambda_0p03",
+    "random_old1", "random_old4", "random_buf250", "random_buf1000", "dapr_weak_old1", "dapr_weak_old4", "dapr_weak_buf250", "dapr_weak_buf1000",
 ]
 METHOD_COLORS = {
     "none": "#6b6a66", "random": "#2a78d6", "random_high": "#7857c5",
@@ -27,6 +28,9 @@ METHOD_COLORS = {
     "mfr_balanced": "#c0392b", "mfr_at_risk": "#7b241c",
     "der_pp": "#5b8c3a", "der_pp_weak": "#8bb85f", "dapr_sym": "#9c6b2f", "dapr_sym_weak": "#c9a26b",
     "dapr_lambda_0p003": "#f2cf7a", "dapr_lambda_0p03": "#b8860b",
+    "random_old1": "#9cc3ec", "random_old4": "#1d4f8f", "random_buf250": "#6fa3dc",
+    "random_buf1000": "#163d6e", "dapr_weak_old1": "#f5d58c", "dapr_weak_old4": "#a87410",
+    "dapr_weak_buf250": "#f0c460", "dapr_weak_buf1000": "#7d5608",
 }
 DATASETS = ["safe", "helpful", "quality"]
 
@@ -205,6 +209,10 @@ def stage_folder(folder, order, stage, stage1_from=None):
     if os.path.exists(direct):
         return direct
     if int(stage) == 1 and stage1_from:
+        # Buffer-size variants rebuild their Stage-1 buffer inside their own run folder.
+        rebuilt = os.path.join(os.path.normpath(folder), "stage1_buffer")
+        if os.path.exists(rebuilt):
+            return rebuilt
         source_run = resolve_borrowed_run(folder, stage1_from)
         return os.path.join(source_run, f"stage1_{dataset}")
     return direct
@@ -382,6 +390,10 @@ SELECTION_SCORES = {
     "dapr_sym_weak": lambda rows: -rows["current_margin"],
     "dapr_lambda_0p003": lambda rows: -rows["current_margin"],
     "dapr_lambda_0p03": lambda rows: -rows["current_margin"],
+    "dapr_weak_old1": lambda rows: -rows["current_margin"],
+    "dapr_weak_old4": lambda rows: -rows["current_margin"],
+    "dapr_weak_buf250": lambda rows: -rows["current_margin"],
+    "dapr_weak_buf1000": lambda rows: -rows["current_margin"],
     "mfr": lambda rows: rows["peak_margin"] - rows["current_margin"],
     "mfr_balanced": lambda rows: rows["peak_margin"] - rows["current_margin"],
     "cpmr": lambda rows: -np.minimum(rows["current_margin"], rows["projected_margin"]),

@@ -16,7 +16,7 @@ import mfr_data
 import mfr_dpo
 from mfr_replay import METHODS as IMPLEMENTED_METHODS, ReplayBuffer
 from mfr_utils import (allowed_seeds, file_sha256, load_protocol, mark_run_complete, method_anchor_strength,
-                       method_ewc_coefficient, method_old_per_step, protocol_behaviors, run_info,
+                       method_buffer_size, method_ewc_coefficient, method_old_per_step, protocol_behaviors, run_info,
                        save_json_atomic,
                        seed_everything, stage_seed,
                        stage1_compatibility_sha256,
@@ -55,6 +55,10 @@ DAPR_RULES = {
     "dapr_sym_weak": "lowest_margin_symmetric_peak_token_anchor_v1",
     "der_pp": "random_symmetric_peak_token_anchor_v1",
     "der_pp_weak": "random_symmetric_peak_token_anchor_v1",
+    "dapr_weak_old1": "lowest_margin_weak_directional_peak_token_anchor_v1",
+    "dapr_weak_old4": "lowest_margin_weak_directional_peak_token_anchor_v1",
+    "dapr_weak_buf250": "lowest_margin_weak_directional_peak_token_anchor_v1",
+    "dapr_weak_buf1000": "lowest_margin_weak_directional_peak_token_anchor_v1",
 }
 
 
@@ -170,12 +174,14 @@ def main():
     if not 1 <= args.start_stage <= n_stages:
         raise ValueError(f"start stage must be between 1 and {n_stages}")
     old_per_step = method_old_per_step(protocol, args.method)
+    buffer_size = method_buffer_size(protocol, args.method)
+    rebuild_stage1_buffer = buffer_size != protocol["buffer_size"]
     anchor_strength = method_anchor_strength(protocol, args.method)
     ewc_coefficient = method_ewc_coefficient(protocol, args.method)
     run_name = f"{protocol['data_version']}_o{args.order}_{args.method}_s{args.seed}"
     print(
         f"Starting {run_name}: order={' -> '.join(order)}, "
-        f"batch={protocol['new_per_step']} new + {old_per_step} replay",
+        f"batch={protocol['new_per_step']} new + {old_per_step} replay, buffer={buffer_size}",
         flush=True,
     )
     artifact_root = Path(args.output_dir).expanduser().resolve()
@@ -202,6 +208,7 @@ def main():
         "lr": protocol["learning_rate"], "beta": protocol["beta"],
         "new_per_step": protocol["new_per_step"], "old_per_step": old_per_step,
         "max_tokens": protocol["max_tokens"], "buffer_size": protocol["buffer_size"],
+        "buffer_size_override": buffer_size if rebuild_stage1_buffer else None,
         "refreshes": protocol["refreshes"], "stage1_from": args.stage1_from,
         "stage1_run_name": Path(args.stage1_from).name if args.stage1_from else None,
         "lora_r": protocol["lora_r"], "lora_alpha": protocol["lora_alpha"],
@@ -252,7 +259,7 @@ def main():
         saved_settings = current_record
     save_json_atomic(saved_settings, existing_settings)
     results = pd.DataFrame()
-    buffer = ReplayBuffer(protocol["buffer_size"], args.seed)
+    buffer = ReplayBuffer(buffer_size, args.seed)
     first_stage = args.start_stage
     previous_adapter = None
     if args.start_stage > 1:
@@ -264,13 +271,13 @@ def main():
                 source_settings = json.load(handle)
             validate_stage1_source(current_record, source_settings)
             previous_adapter = source_run / f"stage1_{order[0]}"
-            buffer = ReplayBuffer.from_csv(previous_adapter / "buffer.csv", protocol["buffer_size"], args.seed)
+            buffer = ReplayBuffer.from_csv(previous_adapter / "buffer.csv", buffer_size, args.seed)
             source_results = pd.read_csv(source_run / "results.csv")
             results = source_results[source_results["stage"] <= 1].copy()
             results["run_name"], results["method"] = run_name, args.method
         else:
             previous_adapter = run_dir / f"stage{args.start_stage - 1}_{order[args.start_stage - 2]}"
-            buffer = ReplayBuffer.from_csv(previous_adapter / "buffer.csv", protocol["buffer_size"], args.seed)
+            buffer = ReplayBuffer.from_csv(previous_adapter / "buffer.csv", buffer_size, args.seed)
             results = pd.read_csv(run_dir / "results.csv")
             results = results[results["stage"] < args.start_stage]
     elif args.stage1_from:
@@ -283,7 +290,7 @@ def main():
         previous_adapter = source_run / f"stage1_{order[0]}"
         if not previous_adapter.exists():
             raise FileNotFoundError(previous_adapter)
-        buffer = ReplayBuffer.from_csv(previous_adapter / "buffer.csv", protocol["buffer_size"], args.seed)
+        buffer = ReplayBuffer.from_csv(previous_adapter / "buffer.csv", buffer_size, args.seed)
         source_results = pd.read_csv(source_run / "results.csv")
         results = source_results[source_results["stage"] <= 1].copy()
         results["run_name"], results["method"] = run_name, args.method
@@ -308,7 +315,22 @@ def main():
         save_json_atomic(saved_settings, existing_settings)
         print("Reference cache canary passed:", canary)
     anchors = {} if args.method in mfr_dpo.ANCHOR_METHODS else None
-    if args.method in mfr_dpo.ANCHOR_METHODS and len(buffer):
+    borrowed_stage1 = first_stage == 2 and bool(args.stage1_from)
+    if rebuild_stage1_buffer and borrowed_stage1:
+        # D3 buffer-size variant on a reused Stage-1 checkpoint: refill the Stage-1 buffer at this
+        # method's size from the loaded Stage-1 model. This applies the same rule update_buffer uses
+        # at the end of an in-run Stage 1 (same seeded candidates, scored by the Stage-1 model).
+        print(f"Rebuilding the Stage-1 buffer with {buffer_size} pairs...", flush=True)
+        rebuilt_dir = run_dir / "stage1_buffer"
+        rebuilt_dir.mkdir(parents=True, exist_ok=True)
+        buffer = update_buffer(
+            model, tokenizer, ReplayBuffer(buffer_size, args.seed), 1, order[0],
+            splits[order[0]]["train"], rebuilt_dir, protocol, reference_cache, args.method,
+            anchors=anchors,
+        )
+    if rebuild_stage1_buffer and borrowed_stage1 and anchors is not None:
+        print(f"Captured {len(anchors)} peak preference anchors with the rebuilt buffer.", flush=True)
+    elif args.method in mfr_dpo.ANCHOR_METHODS and len(buffer):
         anchor_path = Path(previous_adapter) / "preference_anchors.npz" if previous_adapter else None
         if anchor_path is not None and anchor_path.exists():
             anchors = mfr_dpo.load_preference_anchors(anchor_path)
@@ -400,6 +422,8 @@ def main():
     ]
     if args.stage1_from:
         expected = [path for path in expected if "stage1_" not in str(path)]
+        if rebuild_stage1_buffer:
+            expected.append(run_dir / "stage1_buffer" / "buffer.csv")
     if args.method in mfr_dpo.ANCHOR_METHODS and n_stages > 1:
         expected.append(
             run_dir / f"stage{n_stages - 1}_{order[n_stages - 2]}" / "preference_anchors.npz"

@@ -344,6 +344,16 @@ print(cells[cells["method"].isin(lam)].groupby("method", observed=True)[["retent
 PY
 ```
 
+### 14a2. Replay budget sensitivity, development cells (8 jobs, ~30 GPU-h)
+
+```bash
+EXT_D3="random_old1,random_old4,random_buf250,random_buf1000,dapr_weak_old1,dapr_weak_old4,dapr_weak_buf250,dapr_weak_buf1000"
+for o in 1 2 3 4; do for s in 0 1; do
+  python scripts/submit_carc.py group --output-dir "$MFR_OUTPUT_DIR" --account $ACCT \
+    --gpu l40s --time 06:00:00 --order $o --seed $s --methods $EXT_D3
+done; done
+```
+
 ### 14b. Chosen variants on the other 22 cells (22 jobs, ~22 GPU-h)
 
 ```bash

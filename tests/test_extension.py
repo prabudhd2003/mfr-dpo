@@ -212,3 +212,74 @@ def test_extension_analysis_reports_e1_e2_with_holm():
     table = mfr_stats.extension_analysis(pd.DataFrame(rows), "der_pp_weak", "dapr_sym_weak")
     assert list(table["test"]) == ["E1", "E2"]
     assert table["significant"].all() and (table["estimate"] > 0).all()
+
+
+# --- D3: replay-ratio and buffer-size sensitivity -------------------------------------------------
+D3_RANDOM = ("random_old1", "random_old4", "random_buf250", "random_buf1000")
+D3_DAPR = ("dapr_weak_old1", "dapr_weak_old4", "dapr_weak_buf250", "dapr_weak_buf1000")
+
+
+def test_budget_variants_select_like_their_base_method():
+    buffer = _buffer()
+    for method in D3_RANDOM:
+        assert method in mfr_replay.METHODS and method not in mfr_dpo.ANCHOR_METHODS
+        assert plan_interval(buffer, method, 12, np.random.default_rng(3)) == \
+            plan_interval(buffer, "random", 12, np.random.default_rng(3))
+        assert not mfr_replay.needs_refresh(method)
+    for method in D3_DAPR:
+        assert method in mfr_replay.METHODS and method in mfr_dpo.ANCHOR_METHODS
+        assert method not in mfr_dpo.SYMMETRIC_ANCHOR_METHODS
+        assert plan_interval(buffer, method, 12, np.random.default_rng(3)) == \
+            plan_interval(buffer, "lowest_margin", 12, np.random.default_rng(3))
+        assert mfr_replay.needs_refresh(method)
+
+
+def test_budget_variants_protocol_settings():
+    from mfr_utils import method_anchor_strength, method_buffer_size, method_old_per_step
+    protocol = load_protocol(ROOT / "configs" / "experiment_protocol.json")
+    for prefix in ("random", "dapr_weak"):
+        assert method_old_per_step(protocol, f"{prefix}_old1") == 1
+        assert method_old_per_step(protocol, f"{prefix}_old4") == 4
+        assert method_old_per_step(protocol, f"{prefix}_buf250") == 2
+        assert method_buffer_size(protocol, f"{prefix}_buf250") == 250
+        assert method_buffer_size(protocol, f"{prefix}_buf1000") == 1000
+        assert method_buffer_size(protocol, f"{prefix}_old1") == 500
+    assert method_buffer_size(protocol, "dapr_weak") == method_buffer_size(protocol, "random") == 500
+    for method in D3_DAPR:
+        assert method_anchor_strength(protocol, method) == method_anchor_strength(protocol, "dapr_weak")
+
+
+def test_bad_buffer_size_override_is_rejected(tmp_path):
+    protocol = json.loads((ROOT / "configs" / "experiment_protocol.json").read_text())
+    protocol["buffer_size_overrides"] = {"random_buf250": 0}
+    path = tmp_path / "protocol.json"
+    path.write_text(json.dumps(protocol))
+    with pytest.raises(ValueError, match="buffer-size override"):
+        load_protocol(path)
+
+
+def test_rebuilt_buffer_sizes_and_even_split():
+    rows = pd.DataFrame({"id": [f"helpful-train-{i:04d}" for i in range(2000)],
+                         "prompt": ["p"] * 2000, "chosen": ["c"] * 2000, "rejected": ["r"] * 2000})
+    for size in (250, 1000):
+        buffer = ReplayBuffer(size=size, seed=0)
+        cand = buffer.candidates("helpful", rows)
+        assert len(cand) == size
+        buffer.add_stage("helpful", cand, pd.Series(0.5, index=cand["id"]))
+        assert len(buffer) == size
+    # the 250-pair candidates are the first 250 of the 500-pair ones (same seeded permutation)
+    small = ReplayBuffer(size=250, seed=0).candidates("helpful", rows)["id"].tolist()
+    base = ReplayBuffer(size=500, seed=0).candidates("helpful", rows)["id"].tolist()
+    assert small == base[:250]
+
+
+def test_stage_folder_prefers_rebuilt_stage1_buffer(tmp_path):
+    import mfr_analysis
+    run = tmp_path / "runs" / "v2_o1_random_buf250_s0"
+    source = tmp_path / "runs" / "v2_o1_none_s0"
+    (source / "stage1_helpful").mkdir(parents=True)
+    run.mkdir(parents=True)
+    order = ["helpful", "safe", "quality"]
+    assert mfr_analysis.stage_folder(run, order, 1, str(source)).endswith("stage1_helpful")
+    (run / "stage1_buffer").mkdir()
+    assert mfr_analysis.stage_folder(run, order, 1, str(source)).endswith("stage1_buffer")

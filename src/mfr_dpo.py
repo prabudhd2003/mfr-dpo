@@ -24,9 +24,11 @@ MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 # the anchor's direction. dapr_lambda_* are DAPR with other anchor strengths (sensitivity).
 SYMMETRIC_ANCHOR_METHODS = ("der_pp", "der_pp_weak", "dapr_sym", "dapr_sym_weak")
 DAPR_LAMBDA_METHODS = ("dapr_lambda_0p003", "dapr_lambda_0p03")
+# Budget sensitivity (D3): DAPR-weak with another replay count or buffer size; same anchor.
+DAPR_BUDGET_METHODS = ("dapr_weak_old1", "dapr_weak_old4", "dapr_weak_buf250", "dapr_weak_buf1000")
 ANCHOR_METHODS = (
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted",
-    *SYMMETRIC_ANCHOR_METHODS, *DAPR_LAMBDA_METHODS,
+    *SYMMETRIC_ANCHOR_METHODS, *DAPR_LAMBDA_METHODS, *DAPR_BUDGET_METHODS,
 )
 EWC_METHODS = ("ewc_100", "ewc_1000", "ewc_10000")
 # Diagnostics that describe the anchors actually applied. They are averaged over anchored

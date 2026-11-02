@@ -107,6 +107,11 @@ def load_protocol(path="configs/experiment_protocol.json"):
             raise ValueError(f"old_per_step override names unknown method {method!r}")
         if not isinstance(old_per_step, int) or old_per_step < 0:
             raise ValueError(f"old_per_step override for {method!r} must be a non-negative integer")
+    for method, size in protocol.get("buffer_size_overrides", {}).items():
+        if method not in known_methods:
+            raise ValueError(f"buffer-size override names unknown method {method!r}")
+        if not isinstance(size, int) or size <= 0:
+            raise ValueError(f"buffer-size override for {method!r} must be a positive integer")
     for method, coefficient in protocol.get("ewc_coefficients", {}).items():
         if method not in known_methods:
             raise ValueError(f"EWC coefficient names unknown method {method!r}")
@@ -168,6 +173,16 @@ def pin_chat_template_date(tokenizer, date=FIXED_CHAT_TEMPLATE_DATE):
 def method_old_per_step(protocol, method):
     """Return the recorded replay budget for one method."""
     return int(protocol.get("old_per_step_overrides", {}).get(method, protocol["old_per_step"]))
+
+
+def method_buffer_size(protocol, method):
+    """Return the replay-buffer size for one method (D3 buffer-size variants override it).
+
+    Stage 1 never depends on this: the buffer is filled only after Stage 1 ends. The settings key
+    `buffer_size` therefore stays the protocol value, so these variants keep the same Stage-1
+    fingerprint and can reuse the `none` run's Stage-1 checkpoint.
+    """
+    return int(protocol.get("buffer_size_overrides", {}).get(method, protocol["buffer_size"]))
 
 
 def method_anchor_strength(protocol, method):
@@ -283,7 +298,8 @@ def validate_resume_settings(settings, saved):
             "fmcr_forecast_horizon", "anchor_strength", "dapr_huber_delta",
             "mir_lookahead_steps", "cpmr_rule", "dapr_rule", "mir_dpo_rule",
             "copr_adapted_rule", "ewc_rule", "ewc_coefficient", "ewc_fisher_pairs",
-            "ewc_fisher_batch_size", "stage1_run_name", "scientific_code_sha256")
+            "ewc_fisher_batch_size", "stage1_run_name", "scientific_code_sha256",
+            "buffer_size_override")
     mismatches = {key: (settings.get(key), saved.get(key))
                   for key in keys if settings.get(key) != saved.get(key)}
     if mismatches:
