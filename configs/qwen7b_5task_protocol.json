@@ -1,0 +1,64 @@
+{
+  "protocol_version": "3.0-qwen25-7b-5task",
+  "data_version": "v3",
+  "data_dir": "data/v3",
+  "model_name": "Qwen/Qwen2.5-7B-Instruct",
+  "model_revision": "PIN_ME",
+  "behaviors": ["helpful", "safe", "quality", "summarize", "code"],
+  "data_sources": {
+    "summarize": {"repo": "CarperAI/openai_summarize_comparisons", "revision": "PIN_ME"},
+    "code": {"repo": "coseal/CodeUltraFeedback_binarized", "revision": "PIN_ME", "min_rating_gap": 1.0}
+  },
+  "orders": {
+    "1": ["helpful", "safe", "quality", "summarize", "code"],
+    "2": ["quality", "safe", "helpful", "code", "summarize"],
+    "3": ["code", "summarize", "safe", "helpful", "quality"]
+  },
+  "three_task_prefix": {
+    "1": "main-study order 1 (helpful, safe, quality)",
+    "2": "main-study order 4 (quality, safe, helpful)"
+  },
+  "methods": ["none", "random", "dapr_weak"],
+  "secondary_methods": ["lowest_margin", "der_pp", "der_pp_weak"],
+  "seeds": [0, 1, 2],
+  "transfer_methods": ["none", "random", "lowest_margin", "dapr_weak", "der_pp", "der_pp_weak"],
+  "joint_seeds": [0],
+  "train_pairs": 2000,
+  "val_pairs": 200,
+  "test_pairs": 300,
+  "max_tokens": 1024,
+  "lora_r": 16,
+  "lora_alpha": 32,
+  "lora_dropout": 0.05,
+  "beta": 0.1,
+  "learning_rate": 0.0001,
+  "epochs": 1,
+  "new_per_step": 18,
+  "old_per_step": 2,
+  "old_per_step_overrides": {},
+  "micro_batch": 2,
+  "buffer_size": 500,
+  "refreshes": 5,
+  "max_share_per_dataset": 0.75,
+  "fmcr_velocity_decay": 0.5,
+  "fmcr_forecast_horizon": 1.0,
+  "anchor_strength": 0.1,
+  "anchor_strength_overrides": {
+    "dapr_weak": 0.01,
+    "der_pp": 0.1,
+    "der_pp_weak": 0.01
+  },
+  "dapr_huber_delta": 1.0,
+  "mir_lookahead_steps": 1,
+  "ewc_coefficients": {},
+  "ewc_fisher_pairs": 500,
+  "ewc_fisher_batch_size": 1,
+  "primary_metric": "accuracy",
+  "secondary_metric": "accuracy_sum",
+  "new_learning_tolerance_points": 2.0,
+  "generation": {
+    "do_sample": false,
+    "max_new_tokens": 512,
+    "batch_size": 4
+  }
+}

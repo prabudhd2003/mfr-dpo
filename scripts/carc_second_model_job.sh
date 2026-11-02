@@ -34,7 +34,8 @@ if sys.argv[1].upper() not in name.upper():
 print(f"GPU: {name}; PyTorch: {torch.__version__}; CUDA: {torch.version.cuda}", flush=True)
 PY
 
-CACHE_PATH="$OUTPUT_DIR/cache/reference_v2.csv"
+DATA_VERSION=$("$PYTHON_BIN" -c 'import json, sys; print(json.load(open(sys.argv[1]))["data_version"])' "$PROTOCOL")
+CACHE_PATH="$OUTPUT_DIR/cache/reference_${DATA_VERSION}.csv"   # reference_v2.csv for the Llama replication
 case "$ACTION" in
   cache)
     "$PYTHON_BIN" -u scripts/validate_model_data.py \

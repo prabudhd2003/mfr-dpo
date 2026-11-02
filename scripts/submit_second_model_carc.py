@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Submit pinned Llama-3.2-3B replication jobs without changing the Qwen artifact tree."""
+"""Submit second-model jobs (Llama-3.2-3B replication by default) outside the Qwen-1.5B artifact tree.
+
+--protocol configs/qwen7b_5task_protocol.json submits the Qwen2.5-7B 5-task extension instead
+(docs/EXTENSION.md); use a separate --output-dir for it.
+"""
 
 from __future__ import annotations
 
@@ -23,6 +27,7 @@ def add_common(parser, default_time):
     parser.add_argument("--conda-env", default=str(ROOT / ".conda" / "envs" / "mfr-dpo"))
     parser.add_argument("--gpu", choices=GPU_CHOICES, default="l40s")
     parser.add_argument("--time", default=default_time)
+    parser.add_argument("--protocol", default=str(PROTOCOL))
     parser.add_argument("--dry-run", action="store_true")
 
 
@@ -47,7 +52,11 @@ def parse_args():
 
 def main():
     args = parse_args()
-    settings = json.loads(PROTOCOL.read_text(encoding="utf-8"))
+    protocol_path = Path(args.protocol).expanduser().resolve()
+    settings = json.loads(protocol_path.read_text(encoding="utf-8"))
+    if "PIN_ME" in json.dumps(settings):
+        raise ValueError(f"{protocol_path.name} still has PIN_ME revisions; pin them first")
+    prefix = "mfr2" if protocol_path == PROTOCOL.resolve() else protocol_path.stem.split("_")[0]
     output_dir = Path(args.output_dir).expanduser().resolve()
     if not output_dir.is_absolute():
         raise ValueError("--output-dir must be an absolute, separate second-model artifact path")
@@ -55,15 +64,15 @@ def main():
     log_dir = output_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     gpu_type, constraint = GPU_CHOICES[args.gpu]
-    base_args = [str(ROOT), str(output_dir), args.conda_env, gpu_type, str(PROTOCOL)]
+    base_args = [str(ROOT), str(output_dir), args.conda_env, gpu_type, str(protocol_path)]
 
     if args.action == "cache":
-        job_name = "mfr2-cache"
+        job_name = f"{prefix}-cache"
         worker_args = ["cache", *base_args]
     elif args.action == "joint":
         if args.seed not in settings["joint_seeds"]:
             raise ValueError(f"unknown joint seed {args.seed}; configured: {settings['joint_seeds']}")
-        job_name = f"mfr2-joint-s{args.seed}"
+        job_name = f"{prefix}-joint-s{args.seed}"
         worker_args = ["joint", *base_args, str(args.seed)]
     else:
         if str(args.order) not in settings["orders"]:
@@ -77,7 +86,7 @@ def main():
         if transfer := settings.get("transfer_methods"):
             if outside := [item for item in methods if item not in transfer]:
                 raise ValueError(f"{outside} are not in the frozen transfer grid {transfer}")
-        job_name = f"mfr2-o{args.order}-s{args.seed}"
+        job_name = f"{prefix}-o{args.order}-s{args.seed}"
         worker_args = ["group", *base_args, str(args.order), str(args.seed), ",".join(methods)]
 
     command = [

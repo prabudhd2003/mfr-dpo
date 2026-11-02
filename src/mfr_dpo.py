@@ -18,8 +18,15 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from mfr_utils import pin_chat_template_date
 
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
+# Extension (docs/EXTENSION.md). Symmetric anchors penalize any movement of a replayed pair's
+# token log-probabilities away from their stored peak values (DER++-style). der_pp* use random
+# replay selection; dapr_sym* use DAPR's lowest-margin selection, so they differ from DAPR only in
+# the anchor's direction. dapr_lambda_* are DAPR with other anchor strengths (sensitivity).
+SYMMETRIC_ANCHOR_METHODS = ("der_pp", "der_pp_weak", "dapr_sym", "dapr_sym_weak")
+DAPR_LAMBDA_METHODS = ("dapr_lambda_0p003", "dapr_lambda_0p03")
 ANCHOR_METHODS = (
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted",
+    *SYMMETRIC_ANCHOR_METHODS, *DAPR_LAMBDA_METHODS,
 )
 EWC_METHODS = ("ewc_100", "ewc_1000", "ewc_10000")
 # Diagnostics that describe the anchors actually applied. They are averaged over anchored
@@ -232,6 +239,18 @@ def _anchor_regularizer(method, policy, token_logp, seq_index, batch, anchors, h
 
         chosen_delta = current_chosen - anchor_chosen
         rejected_delta = current_rejected - anchor_rejected
+        if method in SYMMETRIC_ANCHOR_METHODS:
+            # Any change in either direction counts (no one-sided ReLU).
+            chosen_violation = chosen_delta.abs()
+            rejected_violation = rejected_delta.abs()
+            violations = torch.cat([chosen_violation, rejected_violation])
+            penalties.append(_huber(chosen_violation, huber_delta).sum()
+                             + _huber(rejected_violation, huber_delta).sum())
+            chosen_rates.append((chosen_violation > 0).float().mean().item())
+            rejected_rates.append((rejected_violation > 0).float().mean().item())
+            cap_rates.append((violations > huber_delta).float().mean().item())
+            shifts.append(0.0)
+            continue
         if method == "dapr_c":
             common_shift = torch.cat([chosen_delta, rejected_delta]).mean().detach()
         else:

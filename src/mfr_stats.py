@@ -17,7 +17,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-BEHAVIORS = ("helpful", "safe", "quality")
+BEHAVIORS = ("helpful", "safe", "quality")   # the original three; cell_metrics reads each run's own
 INTERIM_ALPHA = 0.005
 FINAL_ALPHA_AFTER_EXTENSION = 0.048
 ALPHA_NO_EXTENSION = 0.05
@@ -32,35 +32,46 @@ NONINFERIORITY = ("dapr_weak", "random", "final_task", -2.0)
 METRICS = ("retention", "final_task", "final_average")
 
 
-def cell_metrics(results, score="accuracy"):
-    """Per-run retention, final-task and final three-behavior average.
+def cell_metrics(results, score="accuracy", upto_stage=None):
+    """Per-run retention, final-task and final average over the run's own behaviors.
 
     `results` has one row per (run, stage, eval_set) with columns run_name, order_id, method,
     seed, stage, trained_on, eval_set and `score` -- the format of results.csv and of
     locked_test/results_test.csv. Joint runs (trained_on == "joint") get final_average only.
+
+    Works for any number of behaviors (3 in the main study, 5 in the extension). With
+    `upto_stage=k`, a sequential run is cut after stage k and scored on its first k behaviors only:
+    the stage-3 prefix of a 5-task run is then exactly a 3-task run.
     """
     rows = []
     for run_name, part in results.groupby("run_name", sort=False):
         first = part.iloc[0]
         stages = part.drop_duplicates("stage").sort_values("stage")
         stages = stages[stages["stage"] > 0]
+        order = list(stages["trained_on"])
+        joint = order == ["joint"]
+        if upto_stage is not None and not joint:
+            if upto_stage > len(order):
+                raise ValueError(f"{run_name}: has {len(order)} stages, cannot cut at {upto_stage}")
+            order = order[:upto_stage]
+            stages = stages[stages["stage"] <= upto_stage]
         last = int(stages["stage"].max())
         final = part[part["stage"] == last].set_index("eval_set")[score]
-        if set(BEHAVIORS) - set(final.index):
-            raise ValueError(f"{run_name}: missing final scores for {set(BEHAVIORS) - set(final.index)}")
+        behaviors = sorted(final.index) if joint else sorted(order)
+        if not joint and len(set(order)) != len(order):
+            raise ValueError(f"{run_name}: stages {order} repeat a behavior")
+        if set(behaviors) - set(final.index):
+            raise ValueError(f"{run_name}: missing final scores for {set(behaviors) - set(final.index)}")
         row = {"run_name": run_name, "order_id": first["order_id"], "method": first["method"],
-               "seed": int(first["seed"]), "final_average": float(final[list(BEHAVIORS)].mean())}
-        order = list(stages["trained_on"])
-        if order == ["joint"]:
+               "seed": int(first["seed"]), "final_average": float(final[behaviors].mean())}
+        if joint:
             row.update({"retention": np.nan, "final_task": np.nan})
         else:
-            if sorted(order) != sorted(BEHAVIORS):
-                raise ValueError(f"{run_name}: stages {order} are not one pass over {BEHAVIORS}")
             changes = []
             for learned_at, behavior in enumerate(order[:-1], start=1):
                 right_after = part[(part["stage"] == learned_at) & (part["eval_set"] == behavior)][score]
                 changes.append(float(final[behavior]) - float(right_after.iloc[0]))
-            row.update({"retention": float(np.mean(changes)),
+            row.update({"retention": float(np.mean(changes)) if changes else np.nan,
                         "final_task": float(final[order[-1]])})
         rows.append(row)
     return pd.DataFrame(rows)
@@ -183,3 +194,50 @@ def primary_analysis(cells, look):
                                          "passes": bound > margin}
     table.attrs["decision"] = decision
     return table, decision
+
+
+# ----------------------------------------------------------------------------- extension
+
+def select_variant(dev_cells, candidates, baseline="random", tolerance=2.0):
+    """The development selection rule DAPR used, applied to a new method's strength variants.
+
+    Among `candidates` whose mean final-task score on the development cells is at most `tolerance`
+    points below `baseline`, return the one with the highest mean final three-behavior average.
+    Returns (chosen_method, table).
+    """
+    means = dev_cells.groupby("method")[["final_task", "final_average"]].mean()
+    missing = [method for method in [*candidates, baseline] if method not in means.index]
+    if missing:
+        raise ValueError(f"no development cells for {missing}")
+    table = means.loc[list(candidates)].copy()
+    table["final_task_vs_baseline"] = table["final_task"] - means.loc[baseline, "final_task"]
+    table["passes_tolerance"] = table["final_task_vs_baseline"] >= -tolerance
+    passing = table[table["passes_tolerance"]]
+    if passing.empty:
+        raise ValueError("no candidate is within the new-learning tolerance")
+    return str(passing["final_average"].idxmax()), table
+
+
+def extension_analysis(cells, der_method, sym_method, alpha=ALPHA_NO_EXTENSION):
+    """Predeclared extension tests (docs/EXTENSION.md), confirmation seeds 0-4, Holm at alpha.
+
+    E1: DAPR - DER++-style on final average. E2: DAPR - Symmetric-DAPR on retention.
+    `der_method` / `sym_method` are the strength variants chosen by select_variant on the
+    development cells before the 30-cell runs.
+    """
+    tests = {"E1": ("dapr_weak", der_method, "final_average"),
+             "E2": ("dapr_weak", sym_method, "retention")}
+    rows, p_values = [], {}
+    for name, (target, baseline, metric) in tests.items():
+        diffs = paired_differences(cells, target, baseline, metric, seeds=CONFIRMATION_SEEDS)
+        result = seed_mean_ttest(diffs)
+        result["bootstrap_ci"] = seed_block_bootstrap(diffs)
+        p_values[name] = result["p_value"]
+        rows.append({"test": name, "target": target, "baseline": baseline, "metric": metric,
+                     **{k: v for k, v in result.items() if k != "seed_means"}})
+    adjusted = holm(p_values, alpha)
+    table = pd.DataFrame(rows)
+    table["holm_p"] = table["test"].map(lambda name: adjusted[name][0])
+    table["significant"] = table["test"].map(lambda name: adjusted[name][1])
+    table["family_alpha"] = alpha
+    return table

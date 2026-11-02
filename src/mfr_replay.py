@@ -24,6 +24,11 @@ The methods differ in which stored pairs fill the replay slots of each training 
     ewc_100         no replay; LoRA-EWC parameter regularization with coefficient 100
     ewc_1000        no replay; LoRA-EWC parameter regularization with coefficient 1,000
     ewc_10000       no replay; LoRA-EWC parameter regularization with coefficient 10,000
+    der_pp          random replay plus a symmetric peak-token anchor (DER++-style), strength 0.1
+    der_pp_weak     der_pp with strength 0.01
+    dapr_sym        DAPR's lowest-margin selection plus a symmetric anchor, strength 0.1
+    dapr_sym_weak   dapr_sym with strength 0.01
+    dapr_lambda_*   DAPR with anchor strength 0.003 or 0.03 (sensitivity)
 
 Everything here is CPU-only and fully seeded: which pairs enter the buffer depends on the run seed
 and the dataset, never on the method, so every method stores exactly the same candidate pairs.
@@ -38,11 +43,19 @@ METHODS = (
     "none", "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr",
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
     "ewc_100", "ewc_1000", "ewc_10000", "mfr_balanced", "mfr_at_risk",
+    "der_pp", "der_pp_weak", "dapr_sym", "dapr_sym_weak", "dapr_lambda_0p003", "dapr_lambda_0p03",
 )
 REGULARIZATION_METHODS = ("ewc_100", "ewc_1000", "ewc_10000")
 REFRESH_METHODS = (
     "lowest_margin", "mfr", "fmcr", "cpmr", "dapr", "dapr_weak", "dapr_gated",
     "dapr_c", "mir_dpo", "copr_adapted", "mfr_balanced", "mfr_at_risk",
+    "dapr_sym", "dapr_sym_weak", "dapr_lambda_0p003", "dapr_lambda_0p03",
+)
+# Same uniform selection as random; same lowest-current-margin selection as lowest_margin.
+RANDOM_SELECTION_METHODS = ("random", "random_high", "der_pp", "der_pp_weak")
+LOWEST_MARGIN_SELECTION_METHODS = (
+    "lowest_margin", "dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted",
+    "dapr_sym", "dapr_sym_weak", "dapr_lambda_0p003", "dapr_lambda_0p03",
 )
 FORECAST_COLUMNS = [
     "previous_margin", "margin_velocity",
@@ -374,12 +387,10 @@ def plan_interval_details(buffer, method, n_slots, rng, max_share_per_dataset=No
     if method == "mfr_at_risk":
         return _plan_mfr_at_risk(rows, n_slots, tiebreak, plan_index=int(plan_index))
 
-    if method in ("random", "random_high"):
+    if method in RANDOM_SELECTION_METHODS:
         score = tiebreak
         order = np.argsort(tiebreak)                                     # a random permutation
-    elif method in (
-        "lowest_margin", "dapr", "dapr_weak", "dapr_gated", "dapr_c", "copr_adapted",
-    ):
+    elif method in LOWEST_MARGIN_SELECTION_METHODS:
         score = -rows["current_margin"].to_numpy()
         order = np.lexsort((tiebreak, rows["current_margin"].to_numpy()))          # ascending
     else:  # mfr

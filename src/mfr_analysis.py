@@ -14,6 +14,7 @@ METHOD_ORDER = [
     "none", "random", "random_high", "lowest_margin", "mfr", "fmcr", "cpmr",
     "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
     "ewc_100", "ewc_1000", "ewc_10000", "mfr_balanced", "mfr_at_risk",
+    "der_pp", "der_pp_weak", "dapr_sym", "dapr_sym_weak", "dapr_lambda_0p003", "dapr_lambda_0p03",
 ]
 METHOD_COLORS = {
     "none": "#6b6a66", "random": "#2a78d6", "random_high": "#7857c5",
@@ -24,6 +25,8 @@ METHOD_COLORS = {
     "copr_adapted": "#b13c63",
     "ewc_100": "#4c78a8", "ewc_1000": "#355f8a", "ewc_10000": "#1f3b57",
     "mfr_balanced": "#c0392b", "mfr_at_risk": "#7b241c",
+    "der_pp": "#5b8c3a", "der_pp_weak": "#8bb85f", "dapr_sym": "#9c6b2f", "dapr_sym_weak": "#c9a26b",
+    "dapr_lambda_0p003": "#f2cf7a", "dapr_lambda_0p03": "#b8860b",
 }
 DATASETS = ["safe", "helpful", "quality"]
 
@@ -83,7 +86,7 @@ def load_runs(artifact_dir, quiet=False, include_preliminary=True, completed_onl
         status = runs.groupby("run_name")["stage"].max()
         print(f"{len(status)} runs found")
         for name, stage in status.items():
-            print(f"  {name:28s} stages finished: {stage}/3")
+            print(f"  {name:28s} stages finished: {stage}")
     return runs
 
 
@@ -375,6 +378,10 @@ SELECTION_SCORES = {
     "dapr_gated": lambda rows: -rows["current_margin"],
     "dapr_c": lambda rows: -rows["current_margin"],
     "copr_adapted": lambda rows: -rows["current_margin"],
+    "dapr_sym": lambda rows: -rows["current_margin"],
+    "dapr_sym_weak": lambda rows: -rows["current_margin"],
+    "dapr_lambda_0p003": lambda rows: -rows["current_margin"],
+    "dapr_lambda_0p03": lambda rows: -rows["current_margin"],
     "mfr": lambda rows: rows["peak_margin"] - rows["current_margin"],
     "mfr_balanced": lambda rows: rows["peak_margin"] - rows["current_margin"],
     "cpmr": lambda rows: -np.minimum(rows["current_margin"], rows["projected_margin"]),

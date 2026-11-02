@@ -29,9 +29,7 @@ import mfr_data
 import mfr_dpo
 import mfr_eval
 from mfr_analysis import resolve_borrowed_run
-from mfr_utils import file_sha256, load_protocol, run_info, save_json_atomic
-
-DATASETS = ("helpful", "safe", "quality")
+from mfr_utils import file_sha256, load_protocol, protocol_behaviors, run_info, save_json_atomic
 
 
 def parse_args():
@@ -74,8 +72,8 @@ def adapter_hash(adapter):
     raise FileNotFoundError(f"no adapter weights in {adapter}")
 
 
-def complete(folder):
-    return all((folder / f"{d}_test_scores.csv").exists() for d in DATASETS) and (
+def complete(folder, datasets):
+    return all((folder / f"{d}_test_scores.csv").exists() for d in datasets) and (
         folder / "test_results.csv").exists()
 
 
@@ -103,12 +101,13 @@ def main():
         raise FileExistsError(f"{out_root} already has results; use --overwrite intentionally")
 
     splits = mfr_data.load_splits(ROOT / protocol["data_dir"])
-    test = {dataset: splits[dataset]["test"] for dataset in DATASETS}
+    datasets = protocol_behaviors(protocol)   # the original three, or five for the 5-task extension
+    test = {dataset: splits[dataset]["test"] for dataset in datasets}
     rows, manifest = [], []
     for stage, trained_on, adapter, borrowed in checkpoints(run_dir, settings):
         folder = out_root / f"stage{stage}_{trained_on}"
         source_folder = (borrowed / "locked_test" / f"stage1_{trained_on}") if borrowed else None
-        if source_folder is not None and complete(source_folder) and not args.overwrite:
+        if source_folder is not None and complete(source_folder, datasets) and not args.overwrite:
             shutil.copytree(source_folder, folder, dirs_exist_ok=True)
             summary = pd.read_csv(folder / "test_results.csv")
             how = f"copied from {borrowed.name}"

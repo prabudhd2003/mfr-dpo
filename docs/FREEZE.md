@@ -83,3 +83,18 @@ decoding diverges as much inside HF itself).
    buffer, so all completed runs are reproduced identically; only the 20 Llama seed-2 runs of
    orders 3-6 use the new code (the 4 partial `none_s2` runs were moved aside, not resumed).
    Made before any of those runs' results existed.
+
+## Look 1 outcome (2026-10-17)
+Locked test, 30 cells, seeds 0–4, Holm at 0.05:
+- **P1** (DAPR − Random 10%, final average): +2.98, 95% CI 2.60 to 3.37, Holm p = 0.00009, significant.
+- **P2** (DAPR − Lowest Margin, final average): +1.90, 95% CI 1.58 to 2.21, Holm p = 0.00015, significant.
+- **P3** (MFR − Random 10%, retention): +0.55, 95% CI −0.01 to 1.10, p = 0.052, not significant.
+- **Non-inferiority** (DAPR final task vs Random 10%): lower bound −0.23 > −2, passes.
+
+P1 and P2 were both below 0.005, so the two-look rule stopped at look 1. The seeds 5–9 extension was
+not run.
+
+## Extension
+Experiments added after look 1 (symmetric anchors, λ sensitivity, Qwen2.5-7B with five tasks) follow
+`docs/EXTENSION.md`, written before any of them ran.
+

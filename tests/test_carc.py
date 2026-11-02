@@ -26,6 +26,7 @@ def test_default_group_contains_all_configured_methods():
         "none", "random", "mfr", "random_high", "lowest_margin", "fmcr", "cpmr",
         "dapr", "dapr_weak", "dapr_gated", "dapr_c", "mir_dpo", "copr_adapted",
         "ewc_100", "ewc_1000", "ewc_10000", "mfr_balanced", "mfr_at_risk",
+        "der_pp", "der_pp_weak", "dapr_sym", "dapr_sym_weak", "dapr_lambda_0p003", "dapr_lambda_0p03",
     ]
 
 

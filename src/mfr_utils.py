@@ -53,9 +53,17 @@ def stage_seed(seed, stage):
     return int(seed) * 1000 + int(stage)
 
 
+DEFAULT_BEHAVIORS = ("helpful", "safe", "quality")
+
+
+def protocol_behaviors(protocol):
+    """Behaviors a protocol trains and evaluates (the original three unless it declares more)."""
+    return tuple(protocol.get("behaviors", DEFAULT_BEHAVIORS))
+
+
 def buffer_seed(seed, dataset):
     """Stable method-independent seed for one behavior's buffer candidates."""
-    codes = {"helpful": 1, "safe": 2, "quality": 3}
+    codes = {"helpful": 1, "safe": 2, "quality": 3, "summarize": 4, "code": 5}
     return int(seed) * 100 + codes.get(dataset, 9)
 
 
@@ -120,6 +128,12 @@ def load_protocol(path="configs/experiment_protocol.json"):
         raise ValueError(f"extension_methods names unknown methods {unknown}")
     if extension_methods and "none" not in extension_methods:
         raise ValueError("extension_methods must include none, which supplies Stage 1 for the others")
+    behaviors = protocol_behaviors(protocol)
+    if len(set(behaviors)) != len(behaviors) or any("_" in name for name in behaviors):
+        raise ValueError("behaviors must be unique names without underscores")
+    for key, order in protocol["orders"].items():
+        if sorted(order) != sorted(behaviors):
+            raise ValueError(f"order {key} {order} is not one pass over the behaviors {list(behaviors)}")
     joint_seeds = protocol["joint_seeds"]
     if (not isinstance(joint_seeds, list) or not joint_seeds
             or any(not isinstance(seed, int) or seed < 0 for seed in joint_seeds)

@@ -16,7 +16,8 @@ import mfr_data
 import mfr_dpo
 from mfr_replay import METHODS as IMPLEMENTED_METHODS, ReplayBuffer
 from mfr_utils import (allowed_seeds, file_sha256, load_protocol, mark_run_complete, method_anchor_strength,
-                       method_ewc_coefficient, method_old_per_step, run_info, save_json_atomic,
+                       method_ewc_coefficient, method_old_per_step, protocol_behaviors, run_info,
+                       save_json_atomic,
                        seed_everything, stage_seed,
                        stage1_compatibility_sha256,
                        validate_resume_settings, validate_stage1_source)
@@ -41,6 +42,29 @@ def parse_args():
     return parser.parse_args()
 
 
+# Recorded anchor rule per method. The strings for the original methods are unchanged, so resume
+# validation of existing runs still matches. Strength is recorded separately (anchor_strength).
+DAPR_RULES = {
+    "dapr": "lowest_margin_directional_peak_token_anchor_v1",
+    "dapr_weak": "lowest_margin_weak_directional_peak_token_anchor_v1",
+    "dapr_gated": "lowest_margin_live_margin_gated_directional_peak_token_anchor_v1",
+    "dapr_c": "lowest_margin_centered_directional_peak_token_anchor_v1",
+    "dapr_lambda_0p003": "lowest_margin_directional_peak_token_anchor_v1",
+    "dapr_lambda_0p03": "lowest_margin_directional_peak_token_anchor_v1",
+    "dapr_sym": "lowest_margin_symmetric_peak_token_anchor_v1",
+    "dapr_sym_weak": "lowest_margin_symmetric_peak_token_anchor_v1",
+    "der_pp": "random_symmetric_peak_token_anchor_v1",
+    "der_pp_weak": "random_symmetric_peak_token_anchor_v1",
+}
+
+
+def evaluation_sets(protocol):
+    """Validation sets scored after every stage: the original three (in their original order) plus
+    any extra behaviors the protocol declares (5-task extension)."""
+    original = ("safe", "helpful", "quality")
+    return original + tuple(b for b in protocol_behaviors(protocol) if b not in original)
+
+
 def resolve_source_run(recorded, run_dir):
     """Use the recorded source path or the equivalent sibling under this artifact root."""
     source = Path(recorded)
@@ -52,7 +76,7 @@ def resolve_source_run(recorded, run_dir):
 
 def score_sets(model, tokenizer, splits, stage, trained_on, run_meta, run_dir, protocol, reference_cache):
     rows = []
-    for dataset in ("safe", "helpful", "quality"):
+    for dataset in evaluation_sets(protocol):
         scores = mfr_dpo.score_pairs(
             model, tokenizer, splits[dataset]["val"], beta=protocol["beta"],
             max_tokens=protocol["max_tokens"], reference_cache=reference_cache,
@@ -195,14 +219,7 @@ def main():
                                   if args.method in mfr_dpo.EWC_METHODS else None),
         "cpmr_rule": ("min_current_projected_one_refresh_interval_v1"
                       if args.method == "cpmr" else None),
-        "dapr_rule": ("lowest_margin_directional_peak_token_anchor_v1"
-                      if args.method == "dapr" else
-                      "lowest_margin_weak_directional_peak_token_anchor_v1"
-                      if args.method == "dapr_weak" else
-                      "lowest_margin_live_margin_gated_directional_peak_token_anchor_v1"
-                      if args.method == "dapr_gated" else
-                      "lowest_margin_centered_directional_peak_token_anchor_v1"
-                      if args.method == "dapr_c" else None),
+        "dapr_rule": DAPR_RULES.get(args.method),
         "mir_dpo_rule": ("one_incoming_step_dpo_loss_increase_v1"
                          if args.method == "mir_dpo" else None),
         "copr_adapted_rule": ("lowest_margin_peak_pair_distribution_mse_v1"

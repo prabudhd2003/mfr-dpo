@@ -311,3 +311,94 @@ done; done; done
 With `MFR_OUTPUT_DIR` exported, open `notebooks/07a_results.ipynb`, `07b_mechanisms.ipynb`,
 `08_joint_baseline.ipynb`, `09_generation_evaluation.ipynb` and `11_second_model.ipynb` in
 Jupyter on CARC and Run All.
+
+## 14. Extension (`docs/EXTENSION.md`)
+
+Run on the class account (`ACCT=yzhao010_1531`). Each `group` job trains several methods for one
+order and seed, so the job count stays small.
+
+### 14a. Symmetric anchors and λ sensitivity, development cells (8 jobs, ~16 GPU-h)
+
+```bash
+EXT_DEV="der_pp,der_pp_weak,dapr_sym,dapr_sym_weak,dapr_lambda_0p003,dapr_lambda_0p03"
+for o in 1 2 3 4; do for s in 0 1; do
+  python scripts/submit_carc.py group --output-dir "$MFR_OUTPUT_DIR" --account $ACCT \
+    --gpu l40s --time 05:00:00 --order $o --seed $s --methods $EXT_DEV
+done; done
+```
+
+WAIT, then choose one DER++ and one Symmetric-DAPR strength (CPU):
+
+```bash
+python - <<'PY'
+import os, sys; sys.path.insert(0, "src")
+import mfr_analysis, mfr_stats
+runs = mfr_analysis.load_runs(os.environ["MFR_OUTPUT_DIR"], quiet=True, completed_only=True)
+dev = runs[runs["order_id"].astype(int).between(1, 4) & runs["seed"].astype(int).isin([0, 1])]
+cells = mfr_stats.cell_metrics(dev)
+for pair in (["der_pp", "der_pp_weak"], ["dapr_sym", "dapr_sym_weak"]):
+    chosen, table = mfr_stats.select_variant(cells, pair)
+    print(table.round(2).to_string()); print("CHOSEN:", chosen, "\n")
+lam = ["dapr_lambda_0p003", "dapr_weak", "dapr_lambda_0p03", "dapr"]
+print(cells[cells["method"].isin(lam)].groupby("method", observed=True)[["retention", "final_task", "final_average"]].mean().round(2))
+PY
+```
+
+### 14b. Chosen variants on the other 22 cells (22 jobs, ~22 GPU-h)
+
+```bash
+CHOSEN="der_pp_weak,dapr_sym_weak"   # replace with the two CHOSEN names from 14a
+for o in 5 6; do for s in 0 1; do
+  python scripts/submit_carc.py group --output-dir "$MFR_OUTPUT_DIR" --account $ACCT \
+    --gpu l40s --time 03:00:00 --order $o --seed $s --methods $CHOSEN
+done; done
+for o in 1 2 3 4 5 6; do for s in 2 3 4; do
+  python scripts/submit_carc.py group --output-dir "$MFR_OUTPUT_DIR" --account $ACCT \
+    --gpu l40s --time 03:00:00 --order $o --seed $s --methods $CHOSEN
+done; done
+```
+
+WAIT, then run the locked test on the 60 new runs (batched, as in step 8), then E1/E2:
+
+```bash
+python - <<'PY'
+import os, sys; sys.path.insert(0, "src")
+import mfr_analysis, mfr_stats
+cells = mfr_stats.cell_metrics(mfr_analysis.load_locked_test(os.environ["MFR_OUTPUT_DIR"]))
+print(mfr_stats.extension_analysis(cells, der_method="der_pp_weak", sym_method="dapr_sym_weak").to_string(index=False))
+PY
+```
+
+### 14c. Qwen2.5-7B, five tasks
+
+Data, once (CPU). Pin the revisions first, then build:
+
+```bash
+export HF_HOME=$MFR_OUTPUT_DIR/huggingface
+python scripts/prepare_data_v3.py --print-revisions
+# put the printed shas into configs/qwen7b_5task_protocol.json (every PIN_ME), commit, pull
+python scripts/prepare_data_v3.py --output ~/data_v3_build
+# copy ~/data_v3_build into data/v3 in the repo, commit, pull
+```
+
+Cache, pilot and grid:
+
+```bash
+Q7P="--protocol configs/qwen7b_5task_protocol.json"
+Q7OUT="--output-dir /project2/xiangren_1987/grp26-mfr-dpo/artifacts_qwen7b_5task --account $ACCT"
+python scripts/submit_second_model_carc.py cache $Q7P $Q7OUT --time 08:00:00
+# WAIT for the cache, then the pilot (its runs count as grid runs)
+python scripts/submit_second_model_carc.py group $Q7P $Q7OUT --time 12:00:00 \
+  --order 1 --seed 0 --methods none,lowest_margin
+# WAIT and check time and memory, then the rest (one job per order and seed)
+for o in 1 2 3; do for s in 0 1 2; do
+  M="none,random,lowest_margin,dapr_weak"; [ "$o$s" = "10" ] && M="random,dapr_weak"
+  python scripts/submit_second_model_carc.py group $Q7P $Q7OUT --time 24:00:00 \
+    --order $o --seed $s --methods $M
+done; done
+# after 14a: the chosen DER++ variant, one job per order and seed
+```
+
+Locked test per run: `$E locked-test $Q7P $Q7OUT --run-dir <run> --confirm-final-evaluation`.
+Report stage 5 with `mfr_stats.cell_metrics(results)` and the 3-task prefix of orders 1 and 2
+with `cell_metrics(results, upto_stage=3)`.

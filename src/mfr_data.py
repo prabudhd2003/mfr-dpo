@@ -1,4 +1,9 @@
-"""Load, clean, split, validate, and version the three preference datasets."""
+"""Load, clean, split, validate, and version the preference datasets.
+
+v2 has three behaviors (helpful, safe, quality). The 5-task extension (data/v3) keeps those nine
+files byte-identical and adds summarize (Reddit TL;DR) and code (CodeUltraFeedback); see
+scripts/prepare_data_v3.py and docs/EXTENSION.md.
+"""
 
 from __future__ import annotations
 
@@ -82,6 +87,72 @@ def load_ultrafeedback(min_score_gap=1.0, revision=SOURCE_REVISIONS["quality"]):
         "rejected": df["rejected"].apply(lambda chat: chat[-1]["content"]),
     })
     return clean(_with_provenance(out, df, "HuggingFaceH4/ultrafeedback_binarized", split))
+
+
+# Behaviors in their canonical order; data folders hold any subset of these.
+KNOWN_BEHAVIORS = ("helpful", "safe", "quality", "summarize", "code")
+SPLITS = ("train", "val", "test")
+TLDR_REPO = "CarperAI/openai_summarize_comparisons"
+CODE_REPO = "coseal/CodeUltraFeedback_binarized"
+TLDR_INSTRUCTION = "Write a short TL;DR summary of the following Reddit post."
+
+
+def _tldr_prompt(text):
+    """Turn a TL;DR comparison prompt into a chat request: add an instruction, drop the trailing cue."""
+    text = str(text).strip()
+    if text.endswith("TL;DR:"):
+        text = text[: -len("TL;DR:")].rstrip()
+    return f"{TLDR_INSTRUCTION}\n\n{text}"
+
+
+def _tldr_summary(text):
+    text = str(text).strip()
+    if text.startswith("TL;DR:"):
+        text = text[len("TL;DR:"):].strip()
+    return text
+
+
+def _last_message(value):
+    """A response stored either as plain text or as a chat list; return the final message text."""
+    if isinstance(value, dict):
+        return str(value.get("content", ""))
+    if hasattr(value, "__len__") and not isinstance(value, str) and len(value):
+        last = value[-1]
+        return str(last.get("content", "")) if isinstance(last, dict) else str(last)
+    return str(value)
+
+
+def load_tldr(revision=None):
+    """Reddit TL;DR summary comparisons (Stiennon et al., 2020): human-chosen vs rejected summary.
+
+    All published splits are pooled; make_extra_splits then keeps one pair per post and draws
+    prompt-disjoint train/validation/test sets.
+    """
+    frames = []
+    for split in ("train", "valid1", "valid2", "test"):
+        df = _load_dataset(TLDR_REPO, split=split, revision=revision).to_pandas()
+        out = pd.DataFrame({
+            "prompt": df["prompt"].map(_tldr_prompt),
+            "chosen": df["chosen"].map(_tldr_summary),
+            "rejected": df["rejected"].map(_tldr_summary),
+        })
+        frames.append(_with_provenance(out, df, TLDR_REPO, split))
+    return clean(pd.concat(frames, ignore_index=True))
+
+
+def load_codeultrafeedback(min_rating_gap=1.0, revision=None):
+    """CodeUltraFeedback coding preferences (LLM-judge ratings); keep pairs with a clear rating gap."""
+    split = "train"
+    df = _load_dataset(CODE_REPO, split=split, revision=revision).to_pandas()
+    gap = (pd.to_numeric(df["rating_chosen"], errors="coerce")
+           - pd.to_numeric(df["rating_rejected"], errors="coerce"))
+    df = df[gap >= min_rating_gap]
+    out = pd.DataFrame({
+        "prompt": df["instruction"],
+        "chosen": df["chosen"].map(_last_message),
+        "rejected": df["rejected"].map(_last_message),
+    })
+    return clean(_with_provenance(out, df, CODE_REPO, split))
 
 
 def clean(df):
@@ -171,6 +242,52 @@ def make_splits(datasets, tokenizer, sizes, max_tokens=1024, seed=0):
     return splits
 
 
+def make_extra_splits(new_datasets, existing_splits, tokenizer, sizes, max_tokens=1024, seed=0):
+    """Split new behaviors without touching existing ones.
+
+    Prompts already used anywhere in `existing_splits` are excluded, each new prompt is kept once,
+    pairs longer than max_tokens are dropped, and every new behavior gets exactly the requested
+    train/validation/test sizes (or the function stops with the counts).
+    """
+    claimed = {
+        normalize_prompt(prompt)
+        for parts in existing_splits.values() for frame in parts.values() for prompt in frame["prompt"]
+    }
+    splits = {}
+    for name in sorted(new_datasets, key=lambda item: len(new_datasets[item])):
+        if name not in KNOWN_BEHAVIORS or name in existing_splits:
+            raise ValueError(f"{name!r} must be a new behavior from {KNOWN_BEHAVIORS}")
+        df = new_datasets[name].copy()
+        start = len(df)
+        df["_prompt_key"] = df["prompt"].map(normalize_prompt)
+        df = df[~df["_prompt_key"].isin(claimed)]
+        after_overlap = len(df)
+        df = df.drop_duplicates("_prompt_key", keep="first")
+        after_dedupe = len(df)
+        claimed.update(df["_prompt_key"])
+        df = add_token_counts(df.drop(columns="_prompt_key"), tokenizer)
+        longest = df["prompt_tokens"] + df[["chosen_tokens", "rejected_tokens"]].max(axis=1)
+        df = df[longest <= max_tokens].sample(frac=1, random_state=seed).reset_index(drop=True)
+        print(
+            f"{name:9s} {start:6d} pairs | -{start - after_overlap} prompts already used"
+            f" | -{after_overlap - after_dedupe} extra pairs per prompt"
+            f" | -{after_dedupe - len(df)} too long | {len(df)} left"
+        )
+        needed = sizes["train"] + sizes["val"] + sizes["test"]
+        if len(df) < needed:
+            raise ValueError(f"{name}: only {len(df)} usable pairs, need {needed}")
+        test_end, val_end = sizes["test"], sizes["test"] + sizes["val"]
+        parts = {"train": df[val_end:val_end + sizes["train"]], "val": df[test_end:val_end],
+                 "test": df[:test_end]}
+        for split, part in parts.items():
+            part = part.reset_index(drop=True)
+            part.insert(0, "id", [f"{name}-{split}-{i:04d}" for i in range(len(part))])
+            parts[split] = part
+        splits[name] = parts
+    validate_splits({**existing_splits, **splits}, max_tokens=max_tokens)
+    return splits
+
+
 def validate_splits(splits, max_tokens=1024, expected_sizes=None):
     """Fail loudly on leakage, malformed rows, duplicate IDs, or length errors."""
     seen_prompts, seen_ids = {}, set()
@@ -234,6 +351,15 @@ def save_splits(splits, folder, manifest=None):
     return payload
 
 
+def manifest_behaviors(manifest):
+    """Behaviors declared by a manifest's file names, in canonical order."""
+    declared = {name.rsplit("_", 1)[0] for name in manifest.get("files", {})}
+    unknown = declared - set(KNOWN_BEHAVIORS)
+    if unknown:
+        raise ValueError(f"manifest declares unknown behaviors {sorted(unknown)}")
+    return tuple(name for name in KNOWN_BEHAVIORS if name in declared)
+
+
 def verify_split_manifest(folder):
     """Verify that every declared JSONL file still matches its saved hash and row count."""
     folder = Path(folder)
@@ -244,8 +370,8 @@ def verify_split_manifest(folder):
         manifest = json.load(handle)
     expected_names = {
         f"{dataset}_{split}.jsonl"
-        for dataset in ("helpful", "safe", "quality")
-        for split in ("train", "val", "test")
+        for dataset in manifest_behaviors(manifest)
+        for split in SPLITS
     }
     declared = set(manifest.get("files", {}))
     if declared != expected_names:
@@ -272,15 +398,23 @@ def verify_split_manifest(folder):
 
 
 def load_splits(folder, validate=True, verify_hashes=True):
-    """Read splits, verifying v2 file hashes when a manifest is present."""
-    if verify_hashes and (Path(folder) / "manifest.json").exists():
-        verify_split_manifest(folder)
+    """Read splits, verifying file hashes when a manifest is present.
+
+    The behaviors come from the manifest (v2: the original three; v3: five). Without a manifest the
+    original three are read.
+    """
+    manifest_path = Path(folder) / "manifest.json"
+    behaviors = ("helpful", "safe", "quality")
+    if manifest_path.exists():
+        manifest = (verify_split_manifest(folder) if verify_hashes
+                    else json.loads(manifest_path.read_text(encoding="utf-8")))
+        behaviors = manifest_behaviors(manifest)
     splits = {
         name: {
             split: pd.read_json(os.path.join(folder, f"{name}_{split}.jsonl"), lines=True, dtype=False)
-            for split in ("train", "val", "test")
+            for split in SPLITS
         }
-        for name in ("helpful", "safe", "quality")
+        for name in behaviors
     }
     if validate:
         validate_splits(splits)
