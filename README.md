@@ -22,6 +22,102 @@ Anchor for Preference Replay (DAPR) stores the learned-state token log probabili
 replay it penalizes only harmful movement—a preferred response becoming less likely or a rejected response becoming
 more likely—while allowing movement in the helpful direction. This separates replay selection from replay loss.
 
+## Final results (frozen protocol, locked test)
+
+**Status (2026-11-02):** the confirmation study is complete on both models: training, locked test, generation and
+grading. Methods, metrics and statistics were fixed in advance in [`docs/FREEZE.md`](docs/FREEZE.md) (tag
+`freeze-v1`, four documented amendments).
+
+- **Qwen2.5-1.5B-Instruct:** 6 task orders × 5 seeds = 30 cells per method; 8 methods plus joint training
+  (245 runs).
+- **Llama-3.2-3B-Instruct (replication):** 6 orders × 3 seeds = 18 cells; 5 methods plus joint training (93 runs).
+- **Locked test:** 300 pairs per behavior, scored at every stage checkpoint and analyzed once (look 1).
+
+### Pre-registered primary tests (Qwen, 30 cells, Holm-corrected)
+
+| Test | Comparison | Difference | 95% CI | Holm p | Result |
+|---|---|---:|---|---:|---|
+| P1 | DAPR − Random 10%, final three-behavior average | +2.98 | 2.60 to 3.37 | 0.00009 | significant |
+| P2 | DAPR − Lowest Margin, final three-behavior average | +1.90 | 1.58 to 2.21 | 0.00015 | significant |
+| P3 | MFR − Random 10%, retention | +0.55 | −0.01 to 1.10 | 0.052 | not significant |
+| NI | DAPR final-task accuracy not worse than Random 10% by more than 2 points | lower bound −0.23 | | | passes |
+
+P1 and P2 both cleared the interim threshold (p < 0.005), so the two-look rule stopped at look 1 and the seeds 5–9
+extension was not needed. DAPR is the `dapr_weak` run identifier (anchor strength α = 0.01).
+
+### Preference accuracy (locked test)
+
+| Method | Qwen retention | Qwen final task | Qwen final average | Llama retention | Llama final task | Llama final average |
+|---|---:|---:|---:|---:|---:|---:|
+| No replay | −7.02 | 75.20 | 70.76 | −4.59 | 78.63 | 75.20 |
+| Random 10% | −5.41 | 74.75 | 71.65 | −1.97 | 78.31 | 76.84 |
+| Random 14.3% | −4.98 | 74.87 | 71.92 | — | — | — |
+| MFR 10% | −4.86 | 74.63 | 71.91 | −1.54 | 78.12 | 77.14 |
+| MIR-DPO | −4.37 | 75.15 | 72.46 | — | — | — |
+| CPMR 10% | −3.90 | 74.94 | 72.71 | — | — | — |
+| Lowest margin | −4.04 | 75.20 | 72.73 | −1.02 | 78.33 | 77.44 |
+| **DAPR (α = 0.01)** | **−0.97** | 75.03 | **74.63** | **+0.18** | 78.11 | **78.15** |
+| Joint training (all data at once) | — | — | 74.08 | — | — | 78.34 |
+
+The Llama replication is reported as direction and per-cell agreement (out of 18 order × seed cells):
+
+| Comparison | Final average | Retention |
+|---|---|---|
+| DAPR > Random 10% | 15/18 (sign test p ≈ 0.008) | 16/18 (p ≈ 0.001) |
+| DAPR > Lowest margin | 13/18 | 13/18 |
+| MFR > Random 10% | 11/18 | 10/18 |
+
+### Generation evaluation (final checkpoints, greedy decoding)
+
+| Method | Qwen HarmBench ASR ↓ | Qwen XSTest over-refusal ↓ | Qwen IFEval ↑ | Llama HarmBench ASR ↓ | Llama XSTest over-refusal ↓ | Llama IFEval ↑ |
+|---|---:|---:|---:|---:|---:|---:|
+| No replay | 11.3 | 28.0 | 36.7 | 2.1 | 8.0 | 67.1 |
+| Random 10% | 8.9 | 24.7 | 39.2 | 1.4 | 5.6 | 69.4 |
+| MFR 10% | 8.6 | 23.9 | 39.6 | 1.3 | 5.2 | 69.4 |
+| Lowest margin | 6.6 | 29.0 | 39.6 | 1.4 | 5.2 | 69.9 |
+| **DAPR (α = 0.01)** | 7.9 | 25.8 | **40.6** | **0.8** | 6.4 | **70.8** |
+| Joint training | 8.5 | 27.6 | 43.4 | 0.0 | 7.2 | 70.1 |
+| Base model | 13.5 | 29.6 | 36.0 | 6.5 | 7.2 | 67.7 |
+
+Harm and refusal are scored by WildGuard; IFEval is prompt-level strict accuracy. PKU harmful-response rates are near
+zero (≤ 0.8%) for every trained model, so HarmBench and XSTest carry the safety comparison.
+
+A validated reward-model judge (Skywork-Reward-V2, 84.75% agreement with human labels on validation) compares each
+run's final answers with its answers right after learning that behavior (50% = no change; below 50% = forgetting):
+
+| Method (Qwen) | Helpful | Quality |
+|---|---:|---:|
+| Random 10% | 43.4 | 46.4 |
+| MFR 10% | 42.9 | 46.3 |
+| Lowest margin | 42.4 | 43.9 |
+| **DAPR (α = 0.01)** | **51.4** | **48.8** |
+
+Head to head on the same prompts, DAPR's answers beat Lowest Margin's on 53.3% (Helpful) and 52.1% (Quality).
+
+### Mechanism
+
+The three behaviors' training gradients are nearly orthogonal at the start of later stages (cosine −0.02 to 0.12).
+Forgetting therefore looks like gradual drift in shared parameters rather than direct conflict, which is consistent
+with DAPR's result: constraining how replayed pairs may move helps more than choosing which pairs to replay.
+
+### Summary
+
+Margin-based replay combined with a weak one-sided anchor on replayed pairs' token log probabilities (DAPR):
+- nearly eliminates forgetting in continual DPO
+- matches joint training on all the data at once
+- costs nothing in new-task learning
+- does not hurt safety or instruction following
+- replicates on a second model
+
+Ranking replay pairs by historical forgetting (MFR) is not enough on its own: P3 was not significant and the Llama
+replication is near 50/50.
+
+Caveats:
+- On Qwen, joint training keeps about a 3-point IFEval lead; on Llama, DAPR matches it.
+- Generation metrics are reported without confidence intervals, so differences of about one point are directional.
+
+The development results below (validation split, 8 cells) were used to choose the methods before the freeze.
+
 ## What has been completed
 
 - A pilot study confirmed that sequential DPO causes measurable and concentrated forgetting.
@@ -33,11 +129,15 @@ more likely—while allowing movement in the helpful direction. This separates r
 - Notebook 07 reports the complete validation grid, paired uncertainty, per-dataset forgetting, replay-selection
   overlap, concentration, final scores, and runtime.
 
-The final-evaluation infrastructure is also implemented, but these are **not completed results yet**. It includes
-deterministic locked-test and XSTest generation, WildGuard harm/refusal scoring, official IFEval, position-controlled
-Prometheus helpfulness/quality comparisons, blinded pairwise human-review sheets, and a pinned second-model
-replication on `meta-llama/Llama-3.2-3B-Instruct`. The scripts are deliberately separate from training and final-test
-generation requires an explicit acknowledgement that method selection has been frozen.
+The final evaluation is complete (see **Final results** above). It covers:
+- the locked preference test at every stage
+- deterministic vLLM generation
+- WildGuard harm and refusal scoring on PKU, HarmBench and XSTest
+- official IFEval
+- a validated reward-model judge (Prometheus was rejected at 56% validation agreement)
+- a pinned second-model replication on `meta-llama/Llama-3.2-3B-Instruct`
+
+Human evaluation was not run.
 
 The original seven completed methods are:
 
@@ -58,7 +158,7 @@ pairs with the lowest worst-case margin across the present and projected states.
 and 0.75 per-behavior cap as Lowest Margin. The virtual pass restores the adapter, optimizer, learning-rate schedule,
 and random state before real training continues.
 
-Balanced MFR and At-Risk MFR are planned controlled ablations and are **not implemented or evaluated yet**.
+Balanced MFR and At-Risk MFR were implemented and run on the development cells. Neither improved on MFR (final average 71.94 and 72.00 vs 71.98), so both remain development ablations.
 
 Six additional controlled methods have also completed the full eight-cell development grid:
 
@@ -80,12 +180,11 @@ because that name was fixed before the run and is embedded in 8 completed run fo
 hashes. Renaming those artifacts would weaken reproducibility. In figures, `dapr_weak` is displayed as
 **DAPR (α = 0.01)**, while the original α = 0.1 setting is **DAPR-Strong**.
 
-LoRA-EWC is being evaluated as a no-replay regularization baseline. It estimates a diagonal Fisher from per-pair
-DPO-loss gradients on 500 examples and regularizes only trainable LoRA weights. The active coefficient sweep is
-**100, 1,000, and 10,000**. These values were chosen after a scale audit showed that smaller diagnostic settings
-made the weighted EWC penalty negligible relative to the DPO loss. EWC will enter the results only after all three
-new settings finish across the eight development cells.
-Balanced MFR and At-Risk MFR remain separate planned ablations.
+LoRA-EWC was evaluated as a no-replay regularization baseline. It estimates a diagonal Fisher from per-pair DPO-loss
+gradients on 500 examples and regularizes only trainable LoRA weights. Across coefficients 0.1 to 10,000, no setting
+improved the final average over No Replay (70.85 / 70.77 / 70.31 at 100 / 1,000 / 10,000 vs 70.77), even when the
+penalty reached about 28% of the DPO loss. It was therefore dropped from the confirmation grid
+([`docs/EWC_DECISION.md`](docs/EWC_DECISION.md)).
 
 An order-independent **joint-training reference** is also complete. It combines all 6,000 frozen training pairs
 (2,000 per behavior), performs one global seed-controlled shuffle, and trains one fresh adapter for one pass with
@@ -106,7 +205,7 @@ experimental units, so it is not a formal superiority test.
 | Safe | PKU-SafeRLHF | 2,000 | 200 | 300 | Unsafe or illegal requests where the safer response is preferred. |
 | Quality | UltraFeedback Binarized | 2,000 | 200 | 300 | Writing, reasoning, and general question-answering preferences. |
 
-The locked test split has not been used for method development. `data/v2/manifest.json` records the pinned source and
+The locked test split was not used for method development. It was scored once, after the freeze (look 1). `data/v2/manifest.json` records the pinned source and
 model revisions, row counts, and file hashes.
 
 ## Experiment design
@@ -121,8 +220,9 @@ checkpoint. The current grid uses:
 | 3 | Quality → Helpful → Safe |
 | 4 | Quality → Safe → Helpful |
 
-Seeds 0 and 1 are used for each order. Orders 3 and 4 make Quality an earlier behavior so its forgetting can also be
-measured.
+Seeds 0 and 1 of these four orders are the eight development cells. Orders 3 and 4 make Quality an earlier behavior
+so its forgetting can also be measured. The confirmation grid adds orders 5 (Helpful → Quality → Safe) and 6
+(Safe → Quality → Helpful) and seeds 2–4, giving 6 orders × 5 seeds = 30 cells per method.
 
 The primary `accuracy` is the percentage of preference pairs with a positive length-normalized DPO advantage over
 the frozen base model. It measures whether training moved the model in the preferred direction; it is not the same
@@ -134,7 +234,7 @@ retention change = final validation accuracy - accuracy immediately after learni
 
 A value near zero is better. A negative value means the model forgot some of that behavior.
 
-## Current validation results
+## Development results (validation, 8 cells)
 
 The following table averages all eight order–seed cells and is ordered from **most forgetting to least forgetting**.
 “Average forgetting” is the change in an earlier behavior between the point when it was learned and the end of
@@ -247,17 +347,15 @@ What these results support:
   between the strong and selected settings. The coefficient is therefore scientifically important.
 - **COPR-adapted is a useful negative result.** It sharply reduces forgetting but lowers the final average below No
   Replay. It shows that preserving an old pair distribution too rigidly is not enough; plasticity must be measured.
-- **The LoRA-EWC comparison is not yet final.** The active coefficient sweep is 100, 1,000, and 10,000; results
-  will be added only after every setting finishes all eight development cells.
+- **LoRA-EWC does not help.** No coefficient (0.1 to 10,000) improved the final average over No Replay, so it was
+  dropped from the confirmation grid.
 - **Joint training is a useful offline reference.** It reaches a 73.20 average over five seeds. On matched Seeds 0
   and 1 it reaches 74.00, only 0.56 points above DAPR's four-order average, although this is a descriptive rather
   than a formal paired comparison.
 
-These are development-validation results from two seeds, not final test results. They support a controlled project
-conclusion, but not a broad claim that DAPR is universally better. The joint-access reference shows that DAPR is
-close to simultaneous-data training on matched seeds. Balanced MFR
-and At-Risk MFR will separately test behavior allocation and actual current preference failure. Unseen seeds must
-confirm the frozen method before the locked test.
+These are development-validation results from two seeds. They were used to freeze the method set, and the locked
+test on 30 cells then confirmed the DAPR result (see **Final results**). Balanced MFR and At-Risk MFR did not improve
+on MFR.
 
 ## How the results fit together
 
@@ -277,10 +375,12 @@ The project is not simply a contest to make MFR win. The report tells a sequence
    much better retention–plasticity balance than Lowest Margin.
 8. Stronger is not automatically better: DAPR-Strong, DAPR-C, and COPR-adapted protect old behavior more strongly
    but suppress new-task learning. DAPR-Gated is intermediate.
-9. The higher-scale LoRA-EWC sweep will test whether generic LoRA parameter protection can reproduce DAPR's gain.
+9. Generic LoRA parameter protection (LoRA-EWC) does not reproduce DAPR's gain: no coefficient beat No Replay.
 10. Joint training reaches 73.20 average over five seeds. DAPR is close on matched seeds despite facing sequential
     access and using only a 10% replay budget.
-11. Balanced MFR and At-Risk MFR remain controlled selection ablations for allocation and current preference failure.
+11. Balanced MFR and At-Risk MFR did not improve on MFR.
+12. The locked test confirms the picture on 30 cells and on a second model: DAPR beats Random 10% and Lowest Margin
+    (both significant), while MFR's advantage over Random 10% is not significant.
 
 This supports a broader contribution: a controlled study of **what an LLM should rehearse during continual
 preference tuning**, including positive and negative results, rather than an unsupported claim that one heuristic is
@@ -355,4 +455,5 @@ The active notebooks are:
 Training runs as unattended Slurm jobs on USC CARC using one NVIDIA L40S GPU. Large caches, checkpoints, logs, and
 results are stored under the ignored CARC `artifacts/` directory rather than Git.
 
-**Do not inspect or run the locked test until the validation analysis and method-selection rule are frozen.**
+The locked test was scored once, after `freeze-v1` (look 1); see [`docs/FREEZE.md`](docs/FREEZE.md) for the
+protocol and all amendments.
