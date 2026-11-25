@@ -19,9 +19,9 @@
     "2": "main-study order 4 (quality, safe, helpful)"
   },
   "methods": ["none", "random", "dapr_weak"],
-  "secondary_methods": ["lowest_margin", "der_pp", "der_pp_weak"],
+  "secondary_methods": ["lowest_margin", "der_pp", "der_pp_weak", "dapr_sym_weak", "dapr"],
   "seeds": [0, 1, 2],
-  "transfer_methods": ["none", "random", "lowest_margin", "dapr_weak", "der_pp", "der_pp_weak"],
+  "transfer_methods": ["none", "random", "lowest_margin", "dapr_weak", "der_pp", "der_pp_weak", "dapr_sym_weak", "dapr"],
   "joint_seeds": [0],
   "train_pairs": 2000,
   "val_pairs": 200,
@@ -46,7 +46,9 @@
   "anchor_strength_overrides": {
     "dapr_weak": 0.01,
     "der_pp": 0.1,
-    "der_pp_weak": 0.01
+    "der_pp_weak": 0.01,
+    "dapr_sym_weak": 0.01,
+    "dapr": 0.1
   },
   "dapr_huber_delta": 1.0,
   "mir_lookahead_steps": 1,

@@ -412,3 +412,69 @@ done; done
 Locked test per run: `$E locked-test $Q7P $Q7OUT --run-dir <run> --confirm-final-evaluation`.
 Report stage 5 with `mfr_stats.cell_metrics(results)` and the 3-task prefix of orders 1 and 2
 with `cell_metrics(results, upto_stage=3)`.
+
+### 14d. 7B: locked tests, Symmetric-DAPR, strong anchors, generation (EXTENSION.md amendment 2026-11-25)
+
+Shared variables (every wave):
+```bash
+cd /project2/xiangren_1987/grp26-mfr-dpo && source ~/mfr_env.sh
+REPO=$PWD; Q=$REPO/artifacts_qwen7b_5task; QR=$Q/runs
+PROTO=$REPO/configs/qwen7b_5task_protocol.json
+E="python scripts/submit_eval_carc.py"; Q7E="--output-dir $Q --account yzhao010_1531"
+SB="sbatch --partition=gpu --nodes=1 --ntasks=1 --cpus-per-task=8 --mem=64G --gpus-per-task=l40s:1 --output=$Q/logs/%x_%j.out"
+```
+
+**Wave 1** (all independent):
+```bash
+# a. locked tests for the 45 grid runs, one job per seed (none runs first)
+for s in 0 1 2; do
+  { for o in 1 2 3; do echo $QR/v3_o${o}_none_s$s; done
+    for o in 1 2 3; do for m in random lowest_margin dapr_weak der_pp_weak; do echo $QR/v3_o${o}_${m}_s$s; done; done
+  } > ~/locked7b_s$s.txt
+  [ $s = 2 ] && A=xiangren_1987 || A=yzhao010_1531
+  $SB --job-name=locked7b-s$s --time=08:00:00 --account=$A scripts/carc_batch.sh locked $PROTO $Q ~/locked7b_s$s.txt
+done
+# b. Symmetric-DAPR on 9 cells + strong anchors on seed 0, one job per order (lab account)
+for o in 1 2 3; do
+  printf "%s 0 dapr_sym_weak,dapr,der_pp\n%s 1 dapr_sym_weak\n%s 2 dapr_sym_weak\n" $o $o $o > ~/train7b_o$o.txt
+  $SB --job-name=train7b-o$o --time=18:00:00 --account=xiangren_1987 scripts/carc_batch.sh group $PROTO $Q ~/train7b_o$o.txt
+done
+# c. vLLM base for 7B (class account), and reuse the evaluator models already downloaded
+$E vllm-base $Q7E --protocol $PROTO
+mkdir -p $Q/huggingface/hub
+for d in $REPO/artifacts/huggingface/hub/{models--allenai--wildguard,models--Skywork--Skywork-Reward-V2-Llama-3.1-8B,datasets--Paul--XSTest,datasets--walledai--HarmBench,datasets--google--IFEval}; do
+  [ -e "$d" ] && ln -sfn "$d" $Q/huggingface/hub/ || echo "not cached: $d"
+done
+```
+
+**Wave 2** (after the vLLM base job; class account):
+```bash
+$E parity $Q7E --protocol $PROTO --run-dir $QR/v3_o1_dapr_weak_s0
+$E generate $Q7E --protocol $PROTO --base-model --confirm-final-evaluation
+$E generate $Q7E --protocol $PROTO --time 12:00:00 --confirm-final-evaluation \
+  --run-dir $QR/v3_o[1-3]_{none,random,lowest_margin,dapr_weak,der_pp_weak}_s[0-2]
+$E generate $Q7E --protocol $PROTO --time 06:00:00 --checkpoint post_stage --behavior helpful \
+  --max-prompts 150 --confirm-final-evaluation --run-dir $QR/v3_o[1-3]_{random,lowest_margin,dapr_weak,der_pp_weak}_s[0-2]
+$E generate $Q7E --protocol $PROTO --time 06:00:00 --checkpoint post_stage --behavior quality \
+  --max-prompts 150 --confirm-final-evaluation --run-dir $QR/v3_o[12]_{random,lowest_margin,dapr_weak,der_pp_weak}_s[0-2]
+```
+
+**Wave 3** (after wave 1b training and wave 1a locked tests):
+```bash
+{ for o in 1 2 3; do for s in 0 1 2; do echo $QR/v3_o${o}_dapr_sym_weak_s$s; done
+                     echo $QR/v3_o${o}_dapr_s0; echo $QR/v3_o${o}_der_pp_s0; done; } > ~/locked7b_new.txt
+$SB --job-name=locked7b-new --time=08:00:00 --account=xiangren_1987 scripts/carc_batch.sh locked $PROTO $Q ~/locked7b_new.txt
+$E generate $Q7E --protocol $PROTO --time 04:00:00 --confirm-final-evaluation --run-dir $QR/v3_o[1-3]_dapr_sym_weak_s[0-2]
+```
+
+**Wave 4** (after all generation; class account):
+```bash
+FINAL="$QR/v3_o[1-3]_{none,random,lowest_margin,dapr_weak,der_pp_weak,dapr_sym_weak}_s[0-2] $Q/base_model/*"
+eval $E safety $Q7E --time 06:00:00 --run-dir $FINAL
+eval $E ifeval $Q7E --time 16:00:00 --confirm-final-evaluation --run-dir $FINAL
+$E judge $Q7E --within-run $QR/v3_o[1-3]_{random,lowest_margin,dapr_weak,der_pp_weak}_s[0-2] --behaviors helpful
+$E judge $Q7E --within-run $QR/v3_o[12]_{random,lowest_margin,dapr_weak,der_pp_weak}_s[0-2] --behaviors quality
+for b in der_pp_weak lowest_margin dapr_sym_weak; do
+  $E judge $Q7E --candidate-run $QR/v3_o[1-3]_dapr_weak_s[0-2] --baseline-run $QR/v3_o[1-3]_${b}_s[0-2]
+done
+```

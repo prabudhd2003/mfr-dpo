@@ -283,3 +283,12 @@ def test_stage_folder_prefers_rebuilt_stage1_buffer(tmp_path):
     assert mfr_analysis.stage_folder(run, order, 1, str(source)).endswith("stage1_helpful")
     (run / "stage1_buffer").mkdir()
     assert mfr_analysis.stage_folder(run, order, 1, str(source)).endswith("stage1_buffer")
+
+
+def test_seven_b_protocol_has_the_added_anchor_methods():
+    protocol = load_protocol(ROOT / "configs" / "qwen7b_5task_protocol.json")
+    methods = protocol["methods"] + protocol["secondary_methods"]
+    assert {"dapr_sym_weak", "dapr", "der_pp", "der_pp_weak", "dapr_weak"} <= set(methods)
+    overrides = protocol["anchor_strength_overrides"]
+    assert overrides["dapr_sym_weak"] == overrides["dapr_weak"] == overrides["der_pp_weak"] == 0.01
+    assert overrides["dapr"] == overrides["der_pp"] == 0.1

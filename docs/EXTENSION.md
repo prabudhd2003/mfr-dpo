@@ -122,6 +122,18 @@ run at four extra budgets on the development cells:
   result on exactly the main study's tasks, for the 1.5B → 3B → 7B comparison.
 - **Per-cell direction** (DAPR vs each baseline) with a sign test.
 
+## Amendment, 2026-11-25 (after E1/E2 and after the 7B validation results)
+Added after seeing results, so reported **descriptively** (no tests):
+- **Symmetric-DAPR at 7B:** `dapr_sym_weak` (λ 0.01) on all 9 cells. It isolates the anchor's
+  direction at 7B with DAPR's own pair selection.
+- **Strong-anchor check at 7B:** `dapr` and `der_pp` (both λ 0.1) on the seed-0 cell of each order
+  (3 cells). It tests whether the directional anchor keeps new learning better at 7B, as at 1.5B.
+- **7B generation evaluation (D4):** final checkpoints of none, random, lowest margin, DER++-style,
+  DAPR and Symmetric-DAPR, plus the base model. WildGuard (HarmBench, XSTest, PKU), IFEval, and the
+  reward judge (within-run on Helpful/Quality, head-to-head DAPR vs DER++-style, Lowest Margin and
+  Symmetric-DAPR). Only the original three behaviors are generated; the judge was validated on
+  Helpful/Quality only.
+
 ## Not changed
 - **Main-study runs and results.** The code changes add methods and support for more than three
   tasks. Every completed run's settings, Stage-1 fingerprint and results are unchanged.
