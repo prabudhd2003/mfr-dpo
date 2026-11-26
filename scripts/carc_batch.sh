@@ -7,7 +7,10 @@
 # run before its other runs (the others reuse its Stage-1 scores).
 set -uo pipefail
 MODE="$1"; PROTOCOL="$2"; OUTPUT_DIR="$3"; LIST="$4"
-REPO="$(cd "$(dirname "$0")/.." && pwd)"
+# sbatch runs a temporary copy of this script from its spool folder, so find the repo from the
+# protocol path (always REPO/configs/...), never from the script's own location.
+REPO="$(cd "$(dirname "$PROTOCOL")/.." && pwd)"
+if [ ! -f "$REPO/scripts/carc_eval_job.sh" ]; then echo "repo not found from protocol path: $REPO" >&2; exit 2; fi
 ENV="$REPO/.conda/envs/mfr-dpo"
 while read -r first second third; do
   [ -z "${first:-}" ] && continue
